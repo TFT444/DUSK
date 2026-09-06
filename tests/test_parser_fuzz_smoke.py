@@ -60,17 +60,13 @@ def test_parser_fuzz_ci_wrapper_only_accepts_bounded_success(
     """Atheris's bounded exit is accepted only without a failure marker."""
     fake_python = tmp_path / "fake-python"
     fake_python.write_text(
-        "#!/bin/sh\n"
-        f"printf '%s' '{fuzzer_output}'\n"
-        "exit 1\n",
+        f"#!/bin/sh\nprintf '%s' '{fuzzer_output}'\nexit 1\n",
         encoding="utf-8",
     )
     fake_python.chmod(0o755)
     environment = os.environ | {"PYTHON_BIN": str(fake_python)}
     shell_path = (
-        shutil.which("sh")
-        or shutil.which("sh.exe")
-        or str(Path("C:/Program Files/Git/bin/sh.exe"))
+        shutil.which("sh") or shutil.which("sh.exe") or str(Path("C:/Program Files/Git/bin/sh.exe"))
     )
     if shell_path is None:
         pytest.skip("a POSIX shell is required to test the CI wrapper")
