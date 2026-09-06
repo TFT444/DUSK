@@ -1,0 +1,9 @@
+name = "dusk-edge-demo"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+# Secrets are set via `wrangler secret put` — never put real values here.
+# Required secrets: HMAC_SECRET (Worker→policy HMAC key)
+# Required vars:
+[vars]
+POLICY_URL = "http://127.0.0.1:8787"
