@@ -4,8 +4,11 @@
 set -u
 
 python_bin=${PYTHON_BIN:-python}
-output=$("$python_bin" scripts/ci/parser_fuzz_smoke.py 2>&1)
+output_file=$(mktemp)
+trap 'rm -f "$output_file"' EXIT HUP INT TERM
+"$python_bin" scripts/ci/parser_fuzz_smoke.py >"$output_file" 2>&1
 status=$?
+output=$(cat "$output_file")
 printf '%s\n' "$output"
 
 if [ "$status" -eq 0 ]; then
