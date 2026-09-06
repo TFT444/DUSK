@@ -34,9 +34,9 @@ from dusk.policies import Decision, load_enterprise_pack
 
 _ALLOWED_ACTIONS: Final = frozenset({"demo.read_status", "demo.rotate_demo_key"})
 _ALLOWED_SIGNALS: Final = frozenset({"normal", "prompt_injection"})
-_PERMIT_TTL: Final = 60          # seconds a permit remains valid
+_PERMIT_TTL: Final = 60  # seconds a permit remains valid
 _MAX_TIMESTAMP_SKEW: Final = 30  # seconds tolerated clock drift
-_BODY_SIZE_LIMIT: Final = 4096   # bytes maximum request body
+_BODY_SIZE_LIMIT: Final = 4096  # bytes maximum request body
 
 # ---------------------------------------------------------------------------
 # Data structures
@@ -49,19 +49,19 @@ class Permit:
 
     permit_id: str
     action: str
-    action_digest: str      # SHA-256 hex of the canonical action string
+    action_digest: str  # SHA-256 hex of the canonical action string
     tenant_id: str
     agent_id: str
-    issued_at: int          # Unix timestamp
-    expires_at: int         # Unix timestamp (issued_at + _PERMIT_TTL)
-    signature: bytes        # Ed25519 signature over _permit_payload(self)
+    issued_at: int  # Unix timestamp
+    expires_at: int  # Unix timestamp (issued_at + _PERMIT_TTL)
+    signature: bytes  # Ed25519 signature over _permit_payload(self)
 
 
 @dataclass(frozen=True)
 class EvalResult:
     """Policy evaluation outcome from DemoPolicy.evaluate()."""
 
-    decision: str           # "ALLOWED" or "BLOCKED"
+    decision: str  # "ALLOWED" or "BLOCKED"
     reason_code: str
     permit: Permit | None = None
 
@@ -71,7 +71,7 @@ class ExecResult:
     """Execution outcome from DemoExecutor.execute()."""
 
     executed: bool
-    decision: str           # "ALLOWED" or "BLOCKED"
+    decision: str  # "ALLOWED" or "BLOCKED"
     reason_code: str
     permit_id: str | None
     action_digest: str
@@ -390,9 +390,7 @@ class _DemoHandler(BaseHTTPRequestHandler):
             )
             return
 
-        exec_result = self.executor.execute(
-            eval_result.permit, action, tenant_id, agent_id
-        )
+        exec_result = self.executor.execute(eval_result.permit, action, tenant_id, agent_id)
 
         self._send(
             200,
