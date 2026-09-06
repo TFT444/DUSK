@@ -1,0 +1,70 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["image", "runtimeSecret", "config", "resources", "networkPolicy", "migration"],
+  "properties": {
+    "nameOverride": {"type": "string"},
+    "fullnameOverride": {"type": "string"},
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "digest", "pullPolicy", "pullSecrets"],
+      "properties": {
+        "repository": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._/-]+$"},
+        "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "pullPolicy": {"enum": ["IfNotPresent", "Never"]},
+        "pullSecrets": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true}
+      }
+    },
+    "replicaCount": {"type": "integer", "minimum": 2, "maximum": 100},
+    "revisionHistoryLimit": {"type": "integer", "minimum": 1, "maximum": 10},
+    "terminationGracePeriodSeconds": {"type": "integer", "minimum": 10, "maximum": 120},
+    "serviceAccount": {"type": "object"},
+    "podAnnotations": {"type": "object"},
+    "podLabels": {"type": "object"},
+    "service": {"type": "object"},
+    "ingress": {"type": "object"},
+    "runtimeSecret": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["existingSecret", "databaseUrlKey", "cursorSigningKeyKey", "otlpHeadersKey"],
+      "properties": {
+        "existingSecret": {"type": "string", "minLength": 1, "maxLength": 253},
+        "databaseUrlKey": {"type": "string", "minLength": 1},
+        "cursorSigningKeyKey": {"type": "string", "minLength": 1},
+        "otlpHeadersKey": {"type": "string", "minLength": 1}
+      }
+    },
+    "externalSecret": {"type": "object"},
+    "config": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["environment", "oidcIssuer", "oidcAudience", "oidcJwksUri"],
+      "properties": {
+        "environment": {"enum": ["development", "staging", "production"]},
+        "oidcIssuer": {"type": "string", "pattern": "^https://"},
+        "oidcAudience": {"type": "string", "minLength": 1},
+        "oidcJwksUri": {"type": "string", "pattern": "^https://"},
+        "observabilityEnabled": {"type": "boolean"},
+        "otlpEndpoint": {"type": "string"},
+        "decisionReadApiEnabled": {"type": "boolean"},
+        "dashboardReadApiEnabled": {"type": "boolean"},
+        "operationsReadApiEnabled": {"type": "boolean"},
+        "outboxWorkerEnabled": {"type": "boolean"},
+        "privacyLifecycleEnabled": {"type": "boolean"},
+        "enforcementBrokerEnabled": {"type": "boolean"}
+      }
+    },
+    "resources": {"type": "object", "required": ["requests", "limits"]},
+    "autoscaling": {"type": "object"},
+    "podDisruptionBudget": {"type": "object"},
+    "networkPolicy": {"type": "object", "required": ["enabled", "approvedEgress"]},
+    "migration": {"type": "object", "required": ["enabled", "activeDeadlineSeconds", "backoffLimit", "lockTimeoutMs", "statementTimeoutMs"]},
+    "topologySpreadConstraints": {"type": "object"},
+    "priorityClassName": {"type": "string"},
+    "nodeSelector": {"type": "object"},
+    "tolerations": {"type": "array"},
+    "affinity": {"type": "object"}
+  }
+}

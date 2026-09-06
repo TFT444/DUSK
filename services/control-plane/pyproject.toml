@@ -35,6 +35,7 @@ dev = [
 
 [project.scripts]
 dusk-control-plane = "dusk_control_plane.main:run"
+dusk-control-plane-migrate = "dusk_control_plane.migration:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

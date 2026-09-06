@@ -1,5 +1,11 @@
 # DUSK production control plane
 
+Cloud-neutral container, Helm, image-admission, promotion, and rollback
+instructions are documented in
+[`docs/control-plane-deployment.md`](../../docs/control-plane-deployment.md).
+They can be validated locally without AWS, Azure, or managed Kubernetes
+accounts; live-provider qualification remains deferred to issue #251.
+
 This directory contains the independently deployable FastAPI service. It does
 not import or run the Flask application in `dusk-agent-harness`, and
 it does not expose `/v1/gate`. Operational endpoints are always available. The

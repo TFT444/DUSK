@@ -13,6 +13,15 @@ gate_id=$(docker image inspect --format '{{.Id}}' "$project-dusk-gate")
 runtime_id=$(docker image inspect --format '{{.Id}}' "$project-runtime")
 mock_id=$(docker image inspect --format '{{.Id}}' "$project-mock-prod")
 control_plane_id=$(docker image inspect --format '{{.Id}}' dusk-control-plane:ci)
+
+# Exercise the installed console script and packaged Alembic migrations against
+# the same real PostgreSQL version used by the deployment integration suite.
+test -n "${DUSK_TEST_DATABASE_URL:-}"
+docker run --rm --network host \
+  -e "DUSK_CP_DATABASE_URL=$DUSK_TEST_DATABASE_URL" \
+  -e DUSK_CP_MIGRATION_LOCK_TIMEOUT_MS=1000 \
+  -e DUSK_CP_MIGRATION_STATEMENT_TIMEOUT_MS=30000 \
+  "$control_plane_id" dusk-control-plane-migrate
 mkdir -p container-evidence
 cp ci/grype.yml container-evidence/grype.yaml
 printf '%s\n%s\n%s\n%s\n' "$gate_id" "$runtime_id" "$mock_id" "$control_plane_id" \

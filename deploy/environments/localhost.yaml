@@ -1,0 +1,28 @@
+image:
+  digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+replicaCount: 2
+
+ingress:
+  enabled: false
+
+config:
+  environment: development
+  oidcIssuer: https://oidc.localhost.invalid/
+  oidcAudience: dusk-control-plane-local
+  oidcJwksUri: https://oidc.localhost.invalid/.well-known/jwks.json
+
+autoscaling:
+  enabled: false
+
+podDisruptionBudget:
+  enabled: false
+
+networkPolicy:
+  approvedEgress:
+    - name: local-postgresql
+      cidr: 192.0.2.0/24
+      port: 5432
+    - name: local-oidc
+      cidr: 198.51.100.0/24
+      port: 443

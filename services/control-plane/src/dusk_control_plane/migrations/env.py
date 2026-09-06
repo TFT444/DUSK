@@ -7,7 +7,7 @@ import os
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import Connection, pool
+from sqlalchemy import Connection, pool, text
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from dusk_control_plane.storage.models import Base
@@ -42,6 +42,20 @@ def run_migrations_offline() -> None:
 
 
 def _run_migrations(connection: Connection) -> None:
+    lock_timeout_ms = config.get_main_option("dusk_lock_timeout_ms")
+    statement_timeout_ms = config.get_main_option("dusk_statement_timeout_ms")
+    if lock_timeout_ms and statement_timeout_ms:
+        actual = connection.execute(
+            text(
+                "SELECT "
+                "(EXTRACT(EPOCH FROM current_setting('lock_timeout')::interval) * 1000)::bigint, "
+                "(EXTRACT(EPOCH FROM current_setting('statement_timeout')::interval) "
+                "* 1000)::bigint"
+            )
+        ).one()
+        expected = (int(lock_timeout_ms), int(statement_timeout_ms))
+        if tuple(actual) != expected:
+            raise RuntimeError("Alembic connection is missing bounded database timeouts")
     context.configure(
         connection=connection,
         target_metadata=target_metadata,
@@ -55,10 +69,24 @@ def _run_migrations(connection: Connection) -> None:
 async def _run_online() -> None:
     configuration = config.get_section(config.config_ini_section) or {}
     configuration["sqlalchemy.url"] = _database_url()
+    lock_timeout_ms = config.get_main_option("dusk_lock_timeout_ms")
+    statement_timeout_ms = config.get_main_option("dusk_statement_timeout_ms")
+    connect_args: dict[str, object] = {}
+    if lock_timeout_ms and statement_timeout_ms:
+        connect_args = {
+            "timeout": int(lock_timeout_ms) / 1000,
+            "server_settings": {
+                "lock_timeout": lock_timeout_ms,
+                "statement_timeout": statement_timeout_ms,
+                "timezone": "UTC",
+            },
+        }
     engine = async_engine_from_config(
         configuration,
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        hide_parameters=True,
+        connect_args=connect_args,
     )
     async with engine.connect() as connection:
         await connection.run_sync(_run_migrations)

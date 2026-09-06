@@ -1,0 +1,43 @@
+apiVersion: policies.kyverno.io/v1
+kind: ImageValidatingPolicy
+metadata:
+  name: dusk-control-plane-supply-chain
+spec:
+  failurePolicy: Fail
+  validationActions: [Deny]
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [pods]
+  matchImageReferences:
+    - glob: ghcr.io/shieldtech-ltd/dusk-control-plane*
+  validationConfigurations:
+    mutateDigest: false
+    required: true
+    verifyDigest: true
+  attestors:
+    - name: github-actions-keyless
+      cosign:
+        keyless:
+          identities:
+            - issuer: https://token.actions.githubusercontent.com
+              subjectRegExp: '^https://github\.com/ShieldTech-Ltd/DUSK/\.github/workflows/control-plane-image\.yml@refs/(heads/dev|tags/v.*)$'
+  attestations:
+    - name: provenance
+      intoto:
+        type: https://slsa.dev/provenance/v1
+    - name: sbom
+      intoto:
+        type: https://spdx.dev/Document
+  validations:
+    - expression: >-
+        images.containers.map(image, verifyImageSignatures(image, [attestors.github-actions-keyless])).all(e, e > 0)
+      message: The control-plane image must have a valid repository-bound keyless signature.
+    - expression: >-
+        images.containers.map(image, verifyAttestationSignatures(image, attestations.provenance, [attestors.github-actions-keyless])).all(e, e > 0)
+      message: The control-plane image must have signed SLSA provenance.
+    - expression: >-
+        images.containers.map(image, verifyAttestationSignatures(image, attestations.sbom, [attestors.github-actions-keyless])).all(e, e > 0)
+      message: The control-plane image must have a signed SPDX SBOM.

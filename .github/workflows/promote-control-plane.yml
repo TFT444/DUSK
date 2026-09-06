@@ -1,0 +1,120 @@
+name: Promote or roll back control plane
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Protected deployment environment
+        type: choice
+        options: [development, staging, production]
+        required: true
+      operation:
+        description: Deployment operation
+        type: choice
+        options: [promote, rollback]
+        required: true
+      image_digest:
+        description: Approved sha256 digest; required for promotion
+        type: string
+        required: false
+      rollback_revision:
+        description: Prior Helm revision; required for rollback
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: control-plane-promotion
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment: ${{ inputs.environment }}
+    runs-on: [self-hosted, linux]
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: read
+      id-token: write
+      attestations: read
+    env:
+      IMAGE: ghcr.io/${{ github.repository_owner }}/dusk-control-plane
+      VALUES_PATH: ${{ vars.CONTROL_PLANE_VALUES_PATH }}
+      NAMESPACE: ${{ vars.CONTROL_PLANE_NAMESPACE }}
+      PROMOTION_EVIDENCE_PATH: ${{ vars.CONTROL_PLANE_PROMOTION_EVIDENCE_PATH }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Verify runner and protected-environment configuration
+        env:
+          OPERATION: ${{ inputs.operation }}
+          DIGEST: ${{ inputs.image_digest }}
+          REVISION: ${{ inputs.rollback_revision }}
+        run: |
+          command -v cosign
+          command -v gh
+          command -v helm
+          command -v kubectl
+          test -n "$VALUES_PATH"
+          test -f "$VALUES_PATH"
+          test -n "$NAMESPACE"
+          if test "$OPERATION" = promote; then
+            printf '%s' "$DIGEST" | grep -Eq '^sha256:[0-9a-f]{64}$'
+            test -n "$PROMOTION_EVIDENCE_PATH"
+            test -f "$PROMOTION_EVIDENCE_PATH"
+          else
+            printf '%s' "$REVISION" | grep -Eq '^[1-9][0-9]*$'
+          fi
+      - name: Verify signature and GitHub attestations
+        if: inputs.operation == 'promote'
+        env:
+          DIGEST: ${{ inputs.image_digest }}
+        run: |
+          cosign verify "$IMAGE@$DIGEST" \
+            --certificate-identity-regexp '^https://github\.com/ShieldTech-Ltd/DUSK/\.github/workflows/control-plane-image\.yml@refs/(heads/dev|tags/v.*)$' \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com
+          gh attestation verify "oci://$IMAGE@$DIGEST" --repo "$GITHUB_REPOSITORY"
+      - name: Enforce ordered same-digest promotion evidence
+        if: inputs.operation == 'promote'
+        env:
+          TARGET_ENVIRONMENT: ${{ inputs.environment }}
+          DIGEST: ${{ inputs.image_digest }}
+        run: >-
+          python scripts/validate_control_plane_deployment.py promotion
+          "$PROMOTION_EVIDENCE_PATH" --target-environment "$TARGET_ENVIRONMENT"
+          --image-digest "$DIGEST"
+      - name: Validate production configuration
+        if: inputs.operation == 'promote' && inputs.environment == 'production'
+        run: python scripts/validate_control_plane_deployment.py values "$VALUES_PATH" --production
+      - name: Promote the approved digest
+        if: inputs.operation == 'promote'
+        env:
+          DIGEST: ${{ inputs.image_digest }}
+        run: |
+          helm upgrade --install dusk-control-plane deploy/helm/dusk-control-plane \
+            --namespace "$NAMESPACE" --create-namespace --atomic --wait --timeout 10m \
+            --values "$VALUES_PATH" --set-string "image.digest=$DIGEST"
+          kubectl wait --for=condition=available deployment \
+            --selector app.kubernetes.io/instance=dusk-control-plane \
+            --namespace "$NAMESPACE" --timeout=5m
+      - name: Record successful promotion state
+        if: inputs.operation == 'promote'
+        env:
+          TARGET_ENVIRONMENT: ${{ inputs.environment }}
+          DIGEST: ${{ inputs.image_digest }}
+          EVIDENCE_URI: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: >-
+          python scripts/validate_control_plane_deployment.py record-promotion
+          "$PROMOTION_EVIDENCE_PATH" --target-environment "$TARGET_ENVIRONMENT"
+          --image-digest "$DIGEST" --evidence-uri "$EVIDENCE_URI"
+      - name: Roll back application and routing
+        if: inputs.operation == 'rollback'
+        env:
+          REVISION: ${{ inputs.rollback_revision }}
+        run: |
+          helm rollback dusk-control-plane "$REVISION" \
+            --namespace "$NAMESPACE" --wait --timeout 10m
+          kubectl wait --for=condition=available deployment \
+            --selector app.kubernetes.io/instance=dusk-control-plane \
+            --namespace "$NAMESPACE" --timeout=5m

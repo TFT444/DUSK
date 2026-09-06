@@ -129,6 +129,19 @@ jobs:
   containers:
     runs-on: ubuntu-latest
     timeout-minutes: 12
+    services:
+      postgresql:
+        image: postgres:17.11-bookworm@sha256:051f7b7b3abdd564d5d1bd1e8c4b9c1b6e77087d1dd22020ede611c096a272e0
+        env:
+          POSTGRES_DB: dusk_control_plane
+          POSTGRES_USER: dusk_control_plane
+          POSTGRES_PASSWORD: ci-container-only
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U dusk_control_plane -d dusk_control_plane"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      DUSK_TEST_DATABASE_URL: postgresql+asyncpg://dusk_control_plane:ci-container-only@127.0.0.1:5432/dusk_control_plane
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: >-
@@ -154,9 +167,35 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
+  deployment-manifests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+        with: {version: v3.18.6}
+      - name: Lint and render the production chart
+        run: |
+          helm lint deploy/helm/dusk-control-plane
+          helm template dusk-control-plane deploy/helm/dusk-control-plane \
+            --namespace dusk-system > /tmp/dusk-control-plane.yaml
+          test -s /tmp/dusk-control-plane.yaml
+          helm template dusk-control-plane deploy/helm/dusk-control-plane \
+            --namespace dusk-system \
+            --set externalSecret.enabled=true \
+            --set externalSecret.secretStoreRef.name=ci-store \
+            --set 'externalSecret.data[0].secretKey=database-url' \
+            --set 'externalSecret.data[0].remoteRef.key=ci/database-url' \
+            --set ingress.enabled=true \
+            --set ingress.className=nginx \
+            --set ingress.tlsSecretName=dusk-tls \
+            > /tmp/dusk-control-plane-first-install.yaml
+          python scripts/validate_control_plane_deployment.py first-install \
+            /tmp/dusk-control-plane-first-install.yaml
+
   security-gate:
     if: always()
-    needs: [correctness, compatibility, security-tools, codeql, containers]
+    needs: [correctness, compatibility, security-tools, codeql, containers, deployment-manifests]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

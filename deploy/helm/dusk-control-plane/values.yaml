@@ -1,0 +1,117 @@
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  repository: ghcr.io/shieldtech-ltd/dusk-control-plane
+  digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+
+replicaCount: 3
+revisionHistoryLimit: 3
+terminationGracePeriodSeconds: 30
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+podAnnotations: {}
+podLabels: {}
+
+service:
+  port: 8080
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  host: control-plane.example.invalid
+  path: /
+  tlsSecretName: ""
+
+runtimeSecret:
+  existingSecret: dusk-control-plane-runtime
+  databaseUrlKey: database-url
+  cursorSigningKeyKey: cursor-signing-key
+  otlpHeadersKey: otlp-headers
+
+externalSecret:
+  enabled: false
+  apiVersion: external-secrets.io/v1
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: ""
+  data: []
+
+config:
+  environment: production
+  oidcIssuer: https://identity.example.invalid/
+  oidcAudience: dusk-control-plane
+  oidcJwksUri: https://identity.example.invalid/.well-known/jwks.json
+  observabilityEnabled: false
+  otlpEndpoint: ""
+  decisionReadApiEnabled: true
+  dashboardReadApiEnabled: true
+  operationsReadApiEnabled: true
+  outboxWorkerEnabled: false
+  privacyLifecycleEnabled: true
+  enforcementBrokerEnabled: false
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 12
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 75
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+networkPolicy:
+  enabled: true
+  ingressNamespaceSelector:
+    matchLabels:
+      kubernetes.io/metadata.name: ingress-system
+  ingressPodSelector:
+    matchLabels:
+      app.kubernetes.io/component: controller
+  dnsNamespaceSelector:
+    matchLabels:
+      kubernetes.io/metadata.name: kube-system
+  dnsPodSelector:
+    matchLabels:
+      k8s-app: kube-dns
+  approvedEgress:
+    - name: managed-postgresql
+      cidr: 192.0.2.0/24
+      port: 5432
+    - name: oidc-and-jwks
+      cidr: 198.51.100.0/24
+      port: 443
+
+migration:
+  enabled: true
+  activeDeadlineSeconds: 600
+  backoffLimit: 1
+  lockTimeoutMs: 10000
+  statementTimeoutMs: 300000
+
+topologySpreadConstraints:
+  enabled: true
+  topologyKey: topology.kubernetes.io/zone
+
+priorityClassName: ""
+nodeSelector: {}
+tolerations: []
+affinity: {}

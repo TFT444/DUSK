@@ -67,6 +67,11 @@ from dusk_control_plane.evaluations import (
     PipelineTimings,
 )
 from dusk_control_plane.identity import IdentityKind, Principal, Role
+from dusk_control_plane.migration import (
+    _MIGRATION_LOCK_ID,
+    MigrationLockUnavailableError,
+    migrate,
+)
 from dusk_control_plane.observability import Telemetry
 from dusk_control_plane.operations import (
     IntegrationHealthQuery,
@@ -116,6 +121,31 @@ pytestmark = pytest.mark.skipif(
 
 def _alembic_config() -> Config:
     return Config(str(Path(__file__).parents[2] / "alembic.ini"))
+
+
+def test_deployment_migration_lock_prevents_concurrent_upgrade(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    assert DATABASE_URL is not None
+    monkeypatch.setenv("DUSK_CP_DATABASE_URL", DATABASE_URL)
+    monkeypatch.setenv("DUSK_CP_ALEMBIC_CONFIG", str(Path(__file__).parents[2] / "alembic.ini"))
+
+    async def exercise_lock() -> None:
+        engine = create_async_engine(DATABASE_URL)
+        async with engine.connect() as connection:
+            assert await connection.scalar(
+                text("SELECT pg_try_advisory_lock(:lock_id)"),
+                {"lock_id": _MIGRATION_LOCK_ID},
+            )
+            with pytest.raises(MigrationLockUnavailableError):
+                await migrate()
+            await connection.execute(
+                text("SELECT pg_advisory_unlock(:lock_id)"),
+                {"lock_id": _MIGRATION_LOCK_ID},
+            )
+        await engine.dispose()
+
+    asyncio.run(exercise_lock())
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -171,6 +201,17 @@ def test_migration_upgrade_is_retryable_and_matches_current_metadata() -> None:
     config = _alembic_config()
     command.upgrade(config, "head")
     command.check(config)
+
+
+def test_deployment_migration_applies_timeouts_to_alembic_connection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    assert DATABASE_URL is not None
+    monkeypatch.setenv("DUSK_CP_DATABASE_URL", DATABASE_URL)
+    monkeypatch.setenv("DUSK_CP_ALEMBIC_CONFIG", str(Path(__file__).parents[2] / "alembic.ini"))
+    monkeypatch.setenv("DUSK_CP_MIGRATION_LOCK_TIMEOUT_MS", "1000")
+    monkeypatch.setenv("DUSK_CP_MIGRATION_STATEMENT_TIMEOUT_MS", "30000")
+    asyncio.run(migrate())
 
 
 def test_latest_migration_supports_mixed_version_rollback_and_retry() -> None:

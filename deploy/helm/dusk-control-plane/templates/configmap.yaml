@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "dusk-control-plane.fullname" . }}
+  labels:
+    {{- include "dusk-control-plane.labels" . | nindent 4 }}
+data:
+  DUSK_CP_ENVIRONMENT: {{ .Values.config.environment | quote }}
+  DUSK_CP_HOST: "0.0.0.0"
+  DUSK_CP_PORT: {{ .Values.service.port | quote }}
+  DUSK_CP_API_DOCS_ENABLED: "false"
+  DUSK_CP_V2_ENABLED: "true"
+  DUSK_CP_STORAGE_ENABLED: "true"
+  DUSK_CP_OIDC_ISSUER: {{ .Values.config.oidcIssuer | quote }}
+  DUSK_CP_OIDC_AUDIENCE: {{ .Values.config.oidcAudience | quote }}
+  DUSK_CP_OIDC_JWKS_URI: {{ .Values.config.oidcJwksUri | quote }}
+  DUSK_CP_DECISION_READ_API_ENABLED: {{ .Values.config.decisionReadApiEnabled | quote }}
+  DUSK_CP_DASHBOARD_READ_API_ENABLED: {{ .Values.config.dashboardReadApiEnabled | quote }}
+  DUSK_CP_OPERATIONS_READ_API_ENABLED: {{ .Values.config.operationsReadApiEnabled | quote }}
+  DUSK_CP_OBSERVABILITY_ENABLED: {{ .Values.config.observabilityEnabled | quote }}
+  DUSK_CP_OTLP_ENDPOINT: {{ .Values.config.otlpEndpoint | quote }}
+  DUSK_CP_OUTBOX_WORKER_ENABLED: {{ .Values.config.outboxWorkerEnabled | quote }}
+  DUSK_CP_PRIVACY_LIFECYCLE_ENABLED: {{ .Values.config.privacyLifecycleEnabled | quote }}
+  DUSK_CP_ENFORCEMENT_BROKER_ENABLED: {{ .Values.config.enforcementBrokerEnabled | quote }}

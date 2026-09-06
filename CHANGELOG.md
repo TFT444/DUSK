@@ -14,6 +14,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
   and the DUSK gate secret.
 
 ### Added
+- Cloud-neutral control-plane delivery assets: a locked multi-stage OCI build,
+  keyless signing with SBOM and provenance, fail-closed image admission, a
+  hardened Helm chart, external secret references, restricted networking,
+  autoscaling, serialized bounded migrations, same-digest promotion evidence,
+  and backward-compatible rollback guidance. Live cloud accounts remain
+  deferred to #251 until backend/frontend localhost validation is complete.
 - Production resilience qualification for the control plane, including
   concurrent idempotent evaluation serialization, real PostgreSQL connection-loss
   recovery, mixed-version migration rollback and retry, database-trusted broker
