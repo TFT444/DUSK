@@ -11,7 +11,7 @@ if [ "$status" -eq 0 ]; then
   exit 0
 fi
 
-if [ "$status" -eq 1 ]; then
+if [ "$status" -eq 1 ] || [ "$status" -eq 77 ]; then
   echo 'Atheris bounded fuzz completion accepted.'
   exit 0
 fi

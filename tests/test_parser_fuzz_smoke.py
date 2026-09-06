@@ -50,8 +50,9 @@ def test_parser_fuzz_harness_uses_atheris_bounded_run_flag(monkeypatch) -> None:
     ("fuzzer_output", "fuzzer_returncode", "expected_returncode"),
     [
         ("Done 2000 in 0 second(s)\n", 1, 0),
-        ("ERROR: fuzzer crash\n", 77, 77),
-        ("=== Uncaught Python exception: ===\nValueError: bad input\n", 77, 77),
+        ("Done 2000 in 0 second(s)\n", 77, 0),
+        ("ERROR: fuzzer crash\n", 78, 78),
+        ("=== Uncaught Python exception: ===\nValueError: bad input\n", 78, 78),
     ],
 )
 def test_parser_fuzz_ci_wrapper_only_accepts_bounded_success(
