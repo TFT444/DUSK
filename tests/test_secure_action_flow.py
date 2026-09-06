@@ -43,7 +43,7 @@ def _flow(gateway: _Gateway) -> SecureActionFlow:
     return SecureActionFlow(
         gateway=gateway,
         policy=load_enterprise_pack(),
-        private_key=key,
+        signing_key=key,
         proxy=RestrictedExecutionProxy(key.public_key()),
         now=lambda: datetime(2026, 9, 6, 12, 0, tzinfo=UTC),
         trace_id=lambda: "trace-1",
@@ -167,7 +167,7 @@ def test_kill_switch_fails_closed_after_policy_authorization() -> None:
     flow = SecureActionFlow(
         gateway=gateway,
         policy=load_enterprise_pack(),
-        private_key=key,
+        signing_key=key,
         proxy=RestrictedExecutionProxy(key.public_key(), kill_switch=switch),
         now=lambda: datetime(2026, 9, 6, 12, 0, tzinfo=UTC),
         trace_id=lambda: "trace-kill-switch",

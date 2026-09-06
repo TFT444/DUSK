@@ -82,7 +82,7 @@ class SecureActionFlow:
 
     gateway: GatewayPort
     policy: PolicyPack
-    private_key: Ed25519PrivateKey
+    signing_key: Ed25519PrivateKey
     proxy: RestrictedExecutionProxy
     now: Callable[[], datetime]
     trace_id: Callable[[], str]
@@ -138,7 +138,7 @@ class SecureActionFlow:
 
         issued_at = _aware_utc(self.now())
         permit = issue_permit(
-            self.private_key,
+            self.signing_key,
             tenant_id=tenant_id,
             agent_id=agent_id,
             action=action,
