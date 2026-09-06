@@ -12,9 +12,10 @@ if [ "$status" -eq 0 ]; then
   exit 0
 fi
 
-if [ "$status" -eq 1 ] &&
-  printf '%s\n' "$output" | grep -q 'Done 2000 in ' &&
-  ! printf '%s\n' "$output" | grep -Eq 'ERROR:|Uncaught Python exception|AddressSanitizer|UndefinedBehaviorSanitizer'; then
+completion_count=$(printf '%s\n' "$output" | grep -c 'Done 2000 in ' || true)
+failure_count=$(printf '%s\n' "$output" | grep -Ec 'ERROR:|Uncaught Python exception|AddressSanitizer|UndefinedBehaviorSanitizer' || true)
+
+if [ "$status" -eq 1 ] && [ "$completion_count" -gt 0 ] && [ "$failure_count" -eq 0 ]; then
   echo 'Atheris bounded fuzz completion accepted.'
   exit 0
 fi
