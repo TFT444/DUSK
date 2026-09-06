@@ -4,8 +4,10 @@
 set -u
 
 python_bin=${PYTHON_BIN:-python}
+set +e
 "$python_bin" scripts/ci/parser_fuzz_smoke.py
 status=$?
+set -e
 
 if [ "$status" -eq 0 ]; then
   exit 0
