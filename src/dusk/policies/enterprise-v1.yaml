@@ -131,49 +131,285 @@ rules:
     match:
       - {field: action.category, operator: in, value: [communication, financial, legal, production, account]}
       - {field: approval.valid, operator: not_true, value: true}
+  - <<: *enforced
+    id: DUSK-TENANT-001
+    title: Prevent cross-tenant resource read
+    category: tenant
+    rationale: An agent cannot read a resource owned by a tenant other than its authenticated tenant.
+    match:
+      - {field: action.type, operator: in, value: [resource.read, resource.get, resource.list]}
+      - {field: identity.tenant_id, operator: exists, value: true}
+      - {field: tenant.resource_owner, operator: exists, value: true}
+      - {field: tenant.resource_owner, operator: not_equals, value: "$identity.tenant_id"}
+    tests: [allow, deny, bypass, missing-evidence]
+  - <<: *enforced
+    id: DUSK-TENANT-002
+    title: Prevent cross-tenant resource write
+    category: tenant
+    rationale: An agent cannot write or modify a resource owned by a tenant other than its authenticated tenant.
+    match:
+      - {field: identity.tenant_id, operator: exists, value: true}
+      - {field: tenant.resource_owner, operator: exists, value: true}
+      - {field: tenant.resource_owner, operator: not_equals, value: "$identity.tenant_id"}
+      - {field: action.type, operator: in, value: [resource.write, resource.update, resource.delete, resource.patch]}
+    tests: [allow, deny, bypass, missing-evidence]
+  - <<: *enforced
+    id: DUSK-TENANT-003
+    title: Prevent cross-tenant search or vector retrieval
+    category: tenant
+    rationale: Vector and keyword search must be scoped to the authenticated tenant's retrieval filter.
+    match:
+      - {field: identity.tenant_id, operator: exists, value: true}
+      - {field: tenant.retrieval_filter_tenant, operator: exists, value: true}
+      - {field: tenant.retrieval_filter_tenant, operator: not_equals, value: "$identity.tenant_id"}
+    tests: [allow, deny, bypass, missing-evidence]
+  - <<: *enforced
+    id: DUSK-TENANT-004
+    title: Prevent cross-tenant cache or memory access
+    category: tenant
+    rationale: Cache and memory storage partitions must match the identity partition of the acting agent.
+    match:
+      - {field: tenant.storage_partition, operator: exists, value: true}
+      - {field: tenant.identity_partition, operator: exists, value: true}
+      - {field: tenant.storage_partition, operator: not_equals, value: "$tenant.identity_partition"}
+    tests: [allow, deny, bypass, missing-evidence]
+  - <<: *enforced
+    id: DUSK-TENANT-005
+    title: Prevent cross-tenant audit access
+    category: tenant
+    rationale: Audit records can only be read by the tenant that owns them.
+    match:
+      - {field: action.type, operator: equals, value: audit.read}
+      - {field: identity.tenant_id, operator: exists, value: true}
+      - {field: tenant.resource_owner, operator: exists, value: true}
+      - {field: tenant.resource_owner, operator: not_equals, value: "$identity.tenant_id"}
+    tests: [allow, deny, bypass, missing-evidence]
+  - <<: *enforced
+    id: DUSK-TENANT-006
+    title: Prevent shared credential use across tenants
+    category: tenant
+    rationale: A credential must only be used within the tenant it was issued for.
+    match:
+      - {field: identity.tenant_id, operator: exists, value: true}
+      - {field: tenant.credential_bound_tenant, operator: exists, value: true}
+      - {field: tenant.credential_bound_tenant, operator: not_equals, value: "$identity.tenant_id"}
+    tests: [allow, deny, bypass, missing-evidence]
+  - <<: *enforced
+    id: DUSK-TENANT-007
+    title: Prevent project boundary crossover
+    category: tenant
+    rationale: An agent identity must not access resources that belong to a different project boundary.
+    match:
+      - {field: tenant.project, operator: exists, value: true}
+      - {field: tenant.identity_project, operator: exists, value: true}
+      - {field: tenant.project, operator: not_equals, value: "$tenant.identity_project"}
+    tests: [allow, deny, bypass, missing-evidence]
+  - <<: *enforced
+    id: DUSK-TENANT-008
+    title: Prevent production and non-production environment crossover
+    category: tenant
+    rationale: A non-production identity must never access production resources.
+    match:
+      - {field: tenant.environment, operator: equals, value: production}
+      - {field: tenant.identity_environment, operator: exists, value: true}
+      - {field: tenant.identity_environment, operator: not_equals, value: production}
+    tests: [allow, deny, bypass, missing-evidence]
 
-  - &planned
+  - &iam_enforced
     id: DUSK-IAM-003
     version: 1.0.0
     title: Prevent identity impersonation
     category: identity
     severity: critical
     decision: DENY
-    status: planned
+    status: enforced
     owner: DUSK Security
     rationale: An agent cannot act as another principal without delegated authorization.
     frameworks: [OWASP-AGENTIC, NIST-AI-RMF]
-    match: []
-    prerequisites: [delegation chain, workload identity]
-    tests: []
-  - <<: *planned
+    match:
+      - {field: action.type, operator: equals, value: identity.assume}
+      - {field: action.initiating_principal, operator: exists, value: true}
+      - {field: delegation.present, operator: not_true, value: true}
+    prerequisites: []
+    tests: [allow, deny, bypass, missing-evidence, watch, enforce]
+  - <<: *iam_enforced
     id: DUSK-IAM-004
     title: Require an initiating principal for privileged actions
-    prerequisites: [initiating principal, privilege classification]
-  - <<: *planned
+    rationale: A privileged action must have a recorded initiating human principal.
+    match:
+      - {field: action.privileged, operator: equals, value: true}
+      - {field: action.initiating_principal, operator: exists, value: false}
+    prerequisites: []
+    tests: [allow, deny, bypass, missing-evidence, watch, enforce]
+  - <<: *iam_enforced
     id: DUSK-IAM-005
     title: Prevent environment credential crossover
-    prerequisites: [credential environment binding]
-  - <<: *planned
+    rationale: A credential issued for one environment cannot be used in another.
+    match:
+      - {field: action.target_environment, operator: exists, value: true}
+      - {field: identity.credential_environment, operator: not_equals, value: "$action.target_environment"}
+    prerequisites: []
+    tests: [allow, deny, bypass, missing-evidence, watch, enforce]
+  - <<: *iam_enforced
     id: DUSK-IAM-006
     title: Require fresh step-up authorization
     decision: REQUIRE_APPROVAL
-    prerequisites: [approval timestamp, action digest]
-  - <<: *planned
+    rationale: Actions requiring fresh authentication must have a current valid approval.
+    match:
+      - {field: action.requires_fresh_authn, operator: equals, value: true}
+      - {field: approval.valid, operator: not_true, value: true}
+    prerequisites: []
+    tests: [allow, deny, bypass, missing-evidence, watch, enforce]
+  - <<: *iam_enforced
+    id: DUSK-IAM-007
+    title: Prevent workload identity audience mismatch
+    rationale: A workload identity token must be scoped to the target service audience.
+    match:
+      - {field: action.target_service, operator: exists, value: true}
+      - {field: identity.audience, operator: not_equals, value: "$action.target_service"}
+    prerequisites: []
+    tests: [allow, deny, bypass, missing-evidence, watch, enforce]
+  - <<: *iam_enforced
+    id: DUSK-IAM-008
+    title: Prevent stale or revoked identity use
+    rationale: Revoked or stale identities must not be permitted to perform actions.
+    match:
+      - {field: identity.revoked, operator: equals, value: true}
+    prerequisites: []
+    tests: [allow, deny, bypass, missing-evidence, watch, enforce]
+  - <<: *iam_enforced
+    id: DUSK-IAM-009
+    title: Prevent privilege use outside assigned role
+    rationale: An identity cannot perform actions that require a role it has not been assigned.
+    match:
+      - {field: action.required_role, operator: exists, value: true}
+      - {field: identity.role, operator: not_equals, value: "$action.required_role"}
+    prerequisites: []
+    tests: [allow, deny, bypass, missing-evidence, watch, enforce]
+  - <<: *iam_enforced
+    id: DUSK-IAM-010
+    title: Prevent service account interactive login
+    rationale: Service accounts must authenticate non-interactively; interactive sessions indicate credential misuse.
+    match:
+      - {field: action.type, operator: equals, value: auth.login}
+      - {field: identity.type, operator: equals, value: service_account}
+      - {field: identity.interactive, operator: equals, value: true}
+    prerequisites: []
+    tests: [allow, deny, bypass, missing-evidence, watch, enforce]
+  - <<: *iam_enforced
+    id: DUSK-IAM-011
+    title: Prevent identity assurance downgrade
+    rationale: An action requiring assurance cannot proceed when identity assurance is insufficient.
+    match:
+      - {field: action.requires_assurance, operator: equals, value: true}
+      - {field: identity.assurance_sufficient, operator: not_true, value: true}
+    prerequisites: []
+    tests: [allow, deny, bypass, missing-evidence, watch, enforce]
+  - <<: *iam_enforced
+    id: DUSK-IAM-012
+    title: Prevent privileged action without fresh authentication
+    rationale: Privileged actions requiring fresh authentication must be preceded by a confirmed re-authentication event.
+    match:
+      - {field: action.privileged, operator: equals, value: true}
+      - {field: action.requires_fresh_authn, operator: equals, value: true}
+      - {field: identity.fresh_authn_confirmed, operator: not_true, value: true}
+    prerequisites: []
+    tests: [allow, deny, bypass, missing-evidence, watch, enforce]
+  - <<: *enforced
     id: DUSK-PERMIT-005
     title: Enforce maximum permit lifetime
     category: permit
-    prerequisites: [permit issue time, permit expiry]
-  - <<: *planned
+    rationale: A permit whose computed lifetime exceeds the configured maximum cannot be honoured.
+    match:
+      - {field: permit.present, operator: equals, value: true}
+      - {field: permit.lifetime_exceeded, operator: equals, value: true}
+    prerequisites: []
+    tests: [allow, deny, bypass, missing-evidence]
+  - <<: *enforced
+    id: DUSK-PERMIT-006
+    title: Reject permits from untrusted issuers
+    category: permit
+    rationale: Only permits signed by a DUSK-registered issuer authority are valid.
+    match:
+      - {field: permit.present, operator: equals, value: true}
+      - {field: permit.issuer_trusted, operator: not_true, value: true}
+    prerequisites: []
+    tests: [allow, deny, bypass, missing-evidence]
+  - <<: *enforced
+    id: DUSK-PERMIT-007
+    title: Reject permits used for a broader scope than issued
+    category: permit
+    rationale: A permit grants authority for exactly the requested scope; scope expansion is forbidden.
+    match:
+      - {field: permit.present, operator: equals, value: true}
+      - {field: permit.action_scope, operator: not_equals, value: "$permit.scope"}
+    prerequisites: []
+    tests: [allow, deny, bypass, missing-evidence]
+  - <<: *enforced
+    id: DUSK-PERMIT-008
+    title: Reject approval when content digest does not match action digest
+    category: permit
+    rationale: An approval is bound to the exact content digest of the action it authorises.
+    match:
+      - {field: permit.present, operator: equals, value: true}
+      - {field: permit.approval_digest, operator: exists, value: true}
+      - {field: permit.action_digest, operator: not_equals, value: "$permit.approval_digest"}
+    prerequisites: []
+    tests: [allow, deny, bypass, missing-evidence]
+  - <<: *enforced
     id: DUSK-BROKER-002
     title: Prevent raw credential retrieval
     category: broker
-    prerequisites: [broker operation classification]
-  - <<: *planned
+    rationale: The credential broker must acknowledge every credential operation; unacknowledged retrievals are denied.
+    match:
+      - {field: action.protected_target, operator: equals, value: true}
+      - {field: execution.broker_acknowledged, operator: not_true, value: true}
+    prerequisites: []
+    tests: [allow, deny, bypass, missing-evidence]
+  - <<: *enforced
+    id: DUSK-BROKER-003
+    title: Reject credential when audience does not match the target action
+    category: broker
+    rationale: Credentials are audience-scoped; using a credential for a different audience is a mismatch attack.
+    match:
+      - {field: action.protected_target, operator: equals, value: true}
+      - {field: execution.action_audience, operator: not_equals_or_missing, value: "$execution.credential_audience"}
+    prerequisites: []
+    tests: [allow, deny, bypass, missing-evidence]
+  - <<: *enforced
+    id: DUSK-BROKER-004
+    title: Reject credential whose lifetime exceeds the action lifetime
+    category: broker
+    rationale: A credential must not outlive the action it was issued for; excess lifetime increases the blast radius of compromise.
+    match:
+      - {field: action.protected_target, operator: equals, value: true}
+      - {field: execution.credential_expiry, operator: greater_than_or_missing, value: "$execution.action_expiry"}
+    prerequisites: []
+    tests: [allow, deny, bypass, missing-evidence]
+  - <<: *enforced
+    id: DUSK-BROKER-005
+    title: Prevent broker decision bypass or race condition
+    category: broker
+    rationale: An action submitted before the broker has made its authorisation decision circumvents the broker and must be denied.
+    match:
+      - {field: action.protected_target, operator: equals, value: true}
+      - {field: execution.action_request_time, operator: less_than_or_missing, value: "$execution.broker_decision_time"}
+    prerequisites: []
+    tests: [allow, deny, bypass, race-condition, missing-evidence]
+  - &planned
     id: DUSK-FS-002
+    version: 1.0.0
     title: Prevent authentication file modification
     category: filesystem
+    severity: critical
+    decision: DENY
+    status: planned
+    owner: DUSK Security
+    rationale: Permits must not be valid beyond their maximum permitted lifetime.
+    frameworks: [OWASP-AGENTIC, NIST-AI-RMF]
+    match: []
     prerequisites: [canonical path classification]
+    tests: []
   - <<: *planned
     id: DUSK-FS-003
     title: Prevent policy and audit-log tampering
@@ -223,23 +459,110 @@ rules:
     severity: high
     decision: REQUIRE_APPROVAL
     prerequisites: [network resource impact]
-  - <<: *planned
+  - <<: *enforced
     id: DUSK-CLOUD-001
     title: Require approval for production deletion
     category: cloud
     severity: critical
     decision: REQUIRE_APPROVAL
-    prerequisites: [environment identity, deletion impact]
-  - <<: *planned
+    rationale: Production resource deletion requires explicit approval bound to the requested action.
+    match:
+      - {field: action.type, operator: equals, value: cloud.resource.delete}
+      - {field: cloud.environment, operator: equals, value: production}
+      - {field: approval.valid, operator: not_true, value: true}
+    prerequisites: []
+    tests: [allow, deny, bypass, missing-evidence, watch, enforce]
+  - <<: *enforced
     id: DUSK-CLOUD-002
     title: Prevent disabling encryption backups or audit logs
     category: cloud
-    prerequisites: [cloud control semantics]
-  - <<: *planned
+    rationale: Runtime safeguards for encryption, backup, and audit collection must remain enabled.
+    match:
+      - {field: action.type, operator: equals, value: cloud.control.update}
+      - {field: cloud.control, operator: in, value: [encryption, backup, audit]}
+      - {field: cloud.enabled, operator: not_true, value: true}
+    prerequisites: []
+    tests: [allow, deny, bypass, missing-evidence, watch, enforce]
+  - <<: *enforced
     id: DUSK-CLOUD-003
     title: Prevent public cloud resources
     category: cloud
-    prerequisites: [cloud exposure semantics]
+    rationale: Cloud resources must not be made publicly reachable without a separately approved boundary.
+    match:
+      - {field: cloud.public_exposure, operator: equals, value: true}
+      - {field: approval.valid, operator: not_true, value: true}
+    prerequisites: []
+    tests: [allow, deny, bypass, missing-evidence, watch, enforce]
+  - <<: *enforced
+    id: DUSK-CLOUD-004
+    title: Prevent cluster-wide administrator grants
+    category: cloud
+    rationale: Workload identities must not receive cluster-admin or equivalent cluster-wide authority.
+    match:
+      - {field: kubernetes.operation, operator: equals, value: rbac.grant}
+      - {field: kubernetes.role, operator: in, value: [cluster-admin, system:masters, admin]}
+    prerequisites: []
+    tests: [allow, deny, bypass, missing-evidence, watch, enforce]
+  - <<: *enforced
+    id: DUSK-CLOUD-005
+    title: Prevent privileged workload creation
+    category: cloud
+    rationale: Privileged workloads can escape namespace and node isolation boundaries.
+    match:
+      - {field: kubernetes.operation, operator: equals, value: workload.create}
+      - {field: kubernetes.privileged, operator: equals, value: true}
+    prerequisites: []
+    tests: [allow, deny, bypass, missing-evidence, watch, enforce]
+  - <<: *enforced
+    id: DUSK-CLOUD-006
+    title: Prevent secret retrieval outside workload identity
+    category: cloud
+    rationale: Secret retrieval must be authorized for the cryptographically bound workload identity.
+    match:
+      - {field: action.type, operator: equals, value: secret.read}
+      - {field: cloud.workload_identity_authorized, operator: not_true, value: true}
+    prerequisites: []
+    tests: [allow, deny, bypass, missing-evidence, watch, enforce]
+  - <<: *enforced
+    id: DUSK-CLOUD-007
+    title: Prevent public load balancer or ingress exposure
+    category: cloud
+    rationale: Kubernetes services and ingress objects must not create an unapproved public boundary.
+    match:
+      - {field: kubernetes.operation, operator: in, value: [service.create, ingress.create]}
+      - {field: kubernetes.public_exposure, operator: equals, value: true}
+      - {field: approval.valid, operator: not_true, value: true}
+    prerequisites: []
+    tests: [allow, deny, bypass, missing-evidence, watch, enforce]
+  - <<: *enforced
+    id: DUSK-CLOUD-008
+    title: Prevent destructive infrastructure plans
+    category: cloud
+    rationale: Infrastructure plans containing destructive replacement or deletion require a controlled workflow.
+    match:
+      - {field: infrastructure.destructive, operator: equals, value: true}
+      - {field: approval.valid, operator: not_true, value: true}
+    prerequisites: []
+    tests: [allow, deny, bypass, sequence, missing-evidence, watch, enforce]
+  - <<: *enforced
+    id: DUSK-CLOUD-009
+    title: Prevent plans that disable audit backup or encryption controls
+    category: cloud
+    rationale: Infrastructure plans must preserve mandatory audit, backup, and encryption safeguards.
+    match:
+      - {field: infrastructure.disables_controls, operator: contains_any, value: [audit, backup, encryption]}
+    prerequisites: []
+    tests: [allow, deny, bypass, sequence, missing-evidence, watch, enforce]
+  - <<: *enforced
+    id: DUSK-CLOUD-010
+    title: Prevent cross-account or cross-subscription mutation
+    category: cloud
+    rationale: Mutations must remain inside the cloud account or subscription bound to the workload identity.
+    match:
+      - {field: cloud.source_boundary, operator: exists, value: true}
+      - {field: cloud.target_boundary, operator: not_equals, value: "$cloud.source_boundary"}
+    prerequisites: []
+    tests: [allow, deny, bypass, missing-evidence, watch, enforce]
   - <<: *planned
     id: DUSK-DATA-001
     title: Require approval for bulk data export

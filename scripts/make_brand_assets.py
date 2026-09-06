@@ -9,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DOCS = ROOT / "docs"
-SOURCE_ARCH = ROOT / "examples" / "agent-action-monitor" / "docs" / "architecture.svg"
+SOURCE_ARCH = ROOT / "dusk-agent-harness" / "docs" / "architecture.svg"
 
 
 def _logo_uri() -> str:
@@ -51,7 +51,7 @@ def main() -> None:
     assets = {"dusk-hero-banner.svg": hero(), "dusk-workflow-strip.svg": workflow()}
     for name, content in assets.items():
         out = DOCS / name
-        out.write_text(content, encoding="utf-8")
+        out.write_text(content, encoding="utf-8", newline="\n")
         print(f"wrote {out} ({out.stat().st_size} bytes)")
 
 

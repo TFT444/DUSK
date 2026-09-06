@@ -8,7 +8,7 @@ updates:
     labels: [dependencies, security]
 
   - package-ecosystem: pip
-    directory: "/examples/agent-action-monitor"
+    directory: "/dusk-agent-harness"
     schedule:
       interval: weekly
     open-pull-requests-limit: 5

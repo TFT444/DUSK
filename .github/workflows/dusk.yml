@@ -1,437 +1,212 @@
 name: CI
-
 on:
-  push:
-    branches: [dev, main]
-  pull_request:
-    branches: [dev, main]
-
+  push: {branches: [dev, main]}
+  pull_request: {branches: [dev, main]}
 permissions:
   contents: read
-
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
+env:
+  PYTHONPATH: "."
 
 jobs:
-  dco:
+  correctness:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with: { fetch-depth: 0 }
-      - name: Verify Developer Certificate of Origin
-        if: github.event_name == 'pull_request'
+    timeout-minutes: 10
+    services:
+      postgresql:
+        image: postgres:17.11-bookworm@sha256:051f7b7b3abdd564d5d1bd1e8c4b9c1b6e77087d1dd22020ede611c096a272e0
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: >
-          python scripts/check_dco.py
-          "$BASE_SHA"
-          "$HEAD_SHA"
-      - name: Record push validation
-        if: github.event_name != 'pull_request'
-        run: echo "DCO trailers are validated on pull requests."
-
-  lint:
-    runs-on: ubuntu-latest
+          POSTGRES_DB: dusk_control_plane
+          POSTGRES_USER: dusk_control_plane
+          POSTGRES_PASSWORD: ci-integration-only
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U dusk_control_plane -d dusk_control_plane"
+          --health-interval 5s --health-timeout 3s --health-retries 10
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: {fetch-depth: 0}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.11"
           cache: pip
-          cache-dependency-path: pyproject.toml
-      - run: pip install ruff
-      - run: ruff check src/ tests/
-      - run: ruff format --check src/ tests/
-
-  typecheck:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: "3.11"
-          cache: pip
-          cache-dependency-path: pyproject.toml
-      - run: pip install -e ".[dev]"
-      - run: mypy src/dusk/
-
-  security:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: "3.11"
-          cache: pip
-          cache-dependency-path: requirements.txt
-      - run: python -m pip install --upgrade pip
-      - run: pip install bandit pip-audit
-      - run: bandit -r src/ -ll
-      # Audit DUSK's declared dependencies, not the ambient runner toolchain
-      # (a bare `pip-audit` also flags the runner's own pip/setuptools).
-      - run: pip-audit -r requirements.txt
-
-  # Catches orphaned code that a coverage percentage alone can hide (a
-  # well-tested repo's average can stay high while one whole file sits at
-  # 0%, unreferenced anywhere -- exactly how heal.py went unnoticed).
-  # scripts/vulture_whitelist.py documents every suppressed finding with
-  # a real cross-reference check, not blanket ignores.
-  deadcode:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: "3.11"
-          cache: pip
-          cache-dependency-path: pyproject.toml
-      - run: pip install -e ".[dev]" vulture
-      - run: >
-          vulture src/ tests/ scripts/vulture_whitelist.py --min-confidence 60
-          --ignore-decorators "@main.command,@click.*,@app.route,@app.get,@app.post,@*.fixture"
-          --ignore-names "return_value,side_effect"
-
-  # Keep PR feedback fast by scanning only commits introduced by the change.
-  # The scheduled deep-security workflow scans all reachable Git history.
-  secrets:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with: { fetch-depth: 0 }
-      - name: Scan repository history for secrets
+          cache-dependency-path: |
+            pyproject.toml
+            dusk-agent-harness/pyproject.toml
+            services/control-plane/pyproject.toml
+      - run: >-
+          pip install -e ".[dev]" -e "./services/control-plane[dev]"
+          atheris vulture openapi-spec-validator==0.9.0
+          flask flask-cors gunicorn python-dotenv requests
+          -r dusk-agent-harness/runtime/requirements.txt
+          -r dusk-agent-harness/mock-prod/requirements.txt
+      - name: Run integrity, quality, contracts, and tests
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          EVENT_NAME: ${{ github.event_name }}
-        run: |
-          if [ "$EVENT_NAME" = "pull_request" ]; then
-            LOG_OPTS="$BASE_SHA..$HEAD_SHA"
-          else
-            LOG_OPTS="-1 $HEAD_SHA"
-          fi
-          docker run --rm -v "$PWD:/repo" -w /repo \
-            ghcr.io/gitleaks/gitleaks@sha256:cdbb7c955abce02001a9f6c9f602fb195b7fadc1e812065883f695d1eeaba854 \
-            git /repo --no-banner --redact --exit-code 1 --log-opts="$LOG_OPTS"
-
-  workflow-security:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: "3.12"
-          cache: pip
-      - name: Validate workflow syntax and security
-        run: |
-          pip install actionlint-py==1.7.12.24 zizmor==1.29.0
-          actionlint
-          # High-severity findings block; lower-confidence hardening advice is
-          # reviewed separately so it does not make the fast lane noisy.
-          zizmor --min-severity high .github/workflows/
-
-  semgrep:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: "3.12"
-          cache: pip
-      - name: Run repository-pinned security rules
-        run: |
-          pip install semgrep==1.172.0
-          semgrep scan --config .semgrep.yml --error --metrics=off src examples/agent-action-monitor
-
-  codeql:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      # CodeQL uploads SARIF results to GitHub code scanning.
-      security-events: write
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@c3400c2f38909e0dcf3c3a41f2030a8217be5d3e # v3
-        with:
-          languages: python
-          queries: security-extended
-      - name: Analyze Python
-        uses: github/codeql-action/analyze@c3400c2f38909e0dcf3c3a41f2030a8217be5d3e # v3
-        with:
-          category: /language:python
-
-  contract:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: examples/agent-action-monitor/pyproject.toml
-      - name: Validate OpenAPI and Compose contracts
-        working-directory: examples/agent-action-monitor
-        run: |
-          pip install openapi-spec-validator==0.9.0
-          openapi-spec-validator contracts/gate.openapi.yaml
-          DUSK_ENFORCE=false DUSK_GATE_API_KEY=contract-check \
-            docker compose -f compose.yml -f compose.ci.yml config --quiet
-
-  # Narrow, purpose-built check that compares every numeric Config default
-  # against the values documented in README.md, not a general prose linter.
-  doc-consistency:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: "3.11"
-          cache: pip
-          cache-dependency-path: pyproject.toml
-      - run: pip install -e "."
-      - run: python scripts/check_config_docs.py
-      - run: python scripts/check_release_version.py
-      - run: python scripts/check_owasp_readiness.py
-
-  test:
-    needs: [lint, typecheck, security, deadcode, secrets, doc-consistency]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: "3.11"
-          cache: pip
-          cache-dependency-path: pyproject.toml
-      - run: pip install -e ".[dev]"
-      - run: pytest --cov=src/dusk --cov-fail-under=70 --cov-report=term-missing
+        run: sh scripts/ci/pr_correctness.sh "$BASE_SHA" "$HEAD_SHA"
+      - name: Run PostgreSQL migration and repository integration tests
+        env:
+          DUSK_TEST_DATABASE_URL: postgresql+asyncpg://dusk_control_plane:ci-integration-only@127.0.0.1:5432/dusk_control_plane
+        run: pytest -q -n 0 services/control-plane/tests/integration
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with: {name: correctness-results, path: results/, if-no-files-found: error, retention-days: 30}
 
   compatibility:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12"]
+        include:
+          - {python: "3.11", control: PR-043}
+          - {python: "3.12", control: PR-044}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: ${{ matrix.python-version }}
-          cache: pip
-          cache-dependency-path: pyproject.toml
-      - run: pip install -e ".[dev]"
-      - run: pytest -q
-
-  # examples/agent-action-monitor/ is a fully separate, self-contained
-  # package (own pyproject.toml, src/dusk/, tests/) meant to be contributed
-  # upstream to superlinked/sie. Installed without the `sie` extra here --
-  # sie-sdk requires Python 3.12+ and the gate's deterministic fallback path
-  # is exactly what's meant to be exercised without it; a live SIE endpoint
-  # isn't available in CI regardless.
-  example-lint:
-    runs-on: ubuntu-latest
-    defaults:
-      run: { working-directory: examples/agent-action-monitor }
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: "3.11"
-          cache: pip
-          cache-dependency-path: examples/agent-action-monitor/pyproject.toml
-      - run: pip install ruff
-      - run: ruff check src/ tests/ agent-demo/ mock-prod/ lab/ scripts/verify_ci_sandbox.py
-      - run: ruff format --check src/ tests/ agent-demo/ mock-prod/ lab/ scripts/verify_ci_sandbox.py
-
-  example-typecheck:
-    runs-on: ubuntu-latest
-    defaults:
-      run: { working-directory: examples/agent-action-monitor }
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: "3.11"
+          python-version: "${{ matrix.python }}"
           cache: pip
           cache-dependency-path: |
-            examples/agent-action-monitor/pyproject.toml
-            examples/agent-action-monitor/agent-demo/requirements.txt
-            examples/agent-action-monitor/mock-prod/requirements.txt
-      - run: pip install -e ".[dev]"
-      - run: pip install -r agent-demo/requirements.txt -r mock-prod/requirements.txt
-      - run: >
-          mypy src/dusk/ agent-demo/bedrock_client.py agent-demo/mock_bedrock.py
-          agent-demo/harness.py agent-demo/load_driver.py agent-demo/run_scenario.py
-          agent-demo/stub_gate.py mock-prod/app.py scripts/verify_ci_sandbox.py
-          --ignore-missing-imports
+            pyproject.toml
+            services/control-plane/pyproject.toml
+      - run: pip install -e ".[dev]" -e "./services/control-plane[dev]"
+      - run: >-
+          python scripts/ci/run_group.py --results results/compat-${{ matrix.python }}
+          --controls ${{ matrix.control }} -- sh -c
+          'pytest -q && pytest -q services/control-plane/tests'
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with: {name: "compatibility-${{ matrix.python }}-results", path: results/, if-no-files-found: error, retention-days: 30}
 
-  example-security:
+  security-tools:
     runs-on: ubuntu-latest
-    defaults:
-      run: { working-directory: examples/agent-action-monitor }
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: "3.11"
-          cache: pip
-          cache-dependency-path: |
-            examples/agent-action-monitor/pyproject.toml
-            examples/agent-action-monitor/agent-demo/requirements.txt
-            examples/agent-action-monitor/mock-prod/requirements.txt
-      - run: python -m pip install --upgrade pip
-      - run: pip install bandit pip-audit
-      - run: >
-          bandit -r src/ agent-demo/ mock-prod/ scripts/verify_ci_sandbox.py
-          -ll -x "*/test_*.py"
-      # Install in a scratch venv so pip-audit sees only this package's own
-      # declared dependencies, not the runner's ambient toolchain. `pip
-      # freeze` includes an `-e git+...` line for this editable install
-      # itself, which pip-audit can't resolve as a requirement -- drop it,
-      # third-party pinned versions are what's being audited here.
-      - run: |
-          python -m venv /tmp/audit-venv
-          /tmp/audit-venv/bin/pip install -q -e . -r agent-demo/requirements.txt -r mock-prod/requirements.txt
-          /tmp/audit-venv/bin/pip freeze | grep -v '^-e ' > /tmp/audit-requirements.txt
-          pip-audit -r /tmp/audit-requirements.txt
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: {fetch-depth: 0}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with: {python-version: "3.12", cache: pip, cache-dependency-path: requirements.txt}
+      - run: >-
+          pip install bandit[toml] pip-audit semgrep==1.172.0 detect-secrets pytest PyYAML
+          actionlint-py==1.7.12.24 zizmor==1.29.0
+      - name: Run SAST, secret, dependency, and workflow policy checks
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: sh scripts/ci/pr_security.sh "$BASE_SHA" "$HEAD_SHA"
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with: {name: security-results, path: results/, if-no-files-found: error, retention-days: 30}
 
-  container-security:
+  codeql:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions: {contents: read, security-events: write}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - name: Build project images
-        run: >
-          docker compose --project-name agent-action-monitor
-          -f examples/agent-action-monitor/compose.yml build
-          dusk-gate agent-demo mock-prod
-      - name: Scan gate image
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: github/codeql-action/init@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4
+        with: {languages: python, queries: security-extended}
+      - id: analyze
+        continue-on-error: true
+        uses: github/codeql-action/analyze@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4
         with:
-          image-ref: agent-action-monitor-dusk-gate
-          scanners: vuln,secret
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: 1
-      - name: Scan agent demo image
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          image-ref: agent-action-monitor-agent-demo
-          scanners: vuln,secret
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: 1
-      - name: Scan mock target image
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          image-ref: agent-action-monitor-mock-prod
-          scanners: vuln,secret
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: 1
-      - name: Verify authenticated sandbox in watch mode
-        working-directory: examples/agent-action-monitor
+          # Preserve the base branch's analysis identity so GitHub can compare
+          # PR alerts instead of emitting a neutral "configuration not found".
+          category: /language:python
+      - env: {OUTCOME: "${{ steps.analyze.outcome }}"}
+        run: |
+          status=$(test "$OUTCOME" = success && echo PASS || echo FAIL)
+          python scripts/ci/control.py record --control SEC-001 --status "$status" --output results/codeql/SEC-001.json --details "CodeQL $OUTCOME"
+          test "$status" = PASS
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with: {name: codeql-results, path: results/, if-no-files-found: error, retention-days: 30}
+
+  containers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgresql:
+        image: postgres:17.11-bookworm@sha256:051f7b7b3abdd564d5d1bd1e8c4b9c1b6e77087d1dd22020ede611c096a272e0
         env:
-          DUSK_GATE_API_KEY: ci-only-not-a-secret
-        run: sh ./scripts/run_ci_sandbox.sh watch
-      - name: Verify authenticated sandbox in enforce mode
-        working-directory: examples/agent-action-monitor
-        env:
-          DUSK_GATE_API_KEY: ci-only-not-a-secret
-        run: sh ./scripts/run_ci_sandbox.sh enforce
-      - name: Upload sandbox evidence and logs
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+          POSTGRES_DB: dusk_control_plane
+          POSTGRES_USER: dusk_control_plane
+          POSTGRES_PASSWORD: ci-container-only
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U dusk_control_plane -d dusk_control_plane"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      DUSK_TEST_DATABASE_URL: postgresql+asyncpg://dusk_control_plane:ci-container-only@127.0.0.1:5432/dusk_control_plane
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: >-
+          python scripts/ci/run_group.py --results results/containers
+          --controls CTR-001 CTR-002 CTR-003 CTR-004 CTR-005 CTR-006 CTR-007 CTR-008 CTR-009 CTR-010 --
+          sh scripts/ci/container_controls.sh
+      - name: OWASP watch scenario using scanned images
+        working-directory: dusk-agent-harness
+        run: sh scripts/run_owasp_demo.sh --no-build watch
+      - name: OWASP enforce scenario using scanned images
+        working-directory: dusk-agent-harness
+        run: sh scripts/run_owasp_demo.sh --no-build enforce
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with: {name: container-results, path: results/, if-no-files-found: error, retention-days: 30}
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: sandbox-security-evidence
-          path: examples/agent-action-monitor/ci-logs/
+          name: container-evidence
+          path: |
+            container-evidence/
+            dusk-agent-harness/ci-logs/
           if-no-files-found: warn
-          retention-days: 14
-      - name: Verify OWASP demo with scanned images in watch mode
-        working-directory: examples/agent-action-monitor
-        env:
-          DUSK_GATE_API_KEY: ci-only-not-a-secret
-        run: sh ./scripts/run_owasp_demo.sh --no-build watch
-      - name: Verify OWASP demo with scanned images in enforce mode
-        working-directory: examples/agent-action-monitor
-        env:
-          DUSK_GATE_API_KEY: ci-only-not-a-secret
-        run: sh ./scripts/run_owasp_demo.sh --no-build enforce
+          retention-days: 30
 
-  example-deadcode:
+  deployment-manifests:
     runs-on: ubuntu-latest
-    defaults:
-      run: { working-directory: examples/agent-action-monitor }
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: "3.11"
-          cache: pip
-          cache-dependency-path: |
-            examples/agent-action-monitor/pyproject.toml
-            examples/agent-action-monitor/agent-demo/requirements.txt
-            examples/agent-action-monitor/mock-prod/requirements.txt
-      - run: pip install -e ".[dev]" vulture
-      - run: pip install -r agent-demo/requirements.txt -r mock-prod/requirements.txt
-      - run: >
-          vulture src/ tests/ agent-demo/ mock-prod/ scripts/vulture_whitelist.py
-          scripts/verify_ci_sandbox.py --min-confidence 60
-          --ignore-decorators "@app.route,@app.get,@app.post,@click.*,@*.fixture"
-          --ignore-names "return_value,side_effect,testing"
-
-  example-test:
-    needs: [example-lint, example-typecheck, example-security, container-security]
-    runs-on: ubuntu-latest
-    defaults:
-      run: { working-directory: examples/agent-action-monitor }
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: "3.11"
-          cache: pip
-          cache-dependency-path: |
-            examples/agent-action-monitor/pyproject.toml
-            examples/agent-action-monitor/agent-demo/requirements.txt
-            examples/agent-action-monitor/mock-prod/requirements.txt
-      - run: pip install -e ".[dev]"
-      - run: pip install -r agent-demo/requirements.txt -r mock-prod/requirements.txt
-      - run: pytest
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+        with: {version: v3.18.6}
+      - name: Lint and render the production chart
+        run: |
+          helm lint deploy/helm/dusk-control-plane
+          helm template dusk-control-plane deploy/helm/dusk-control-plane \
+            --namespace dusk-system > /tmp/dusk-control-plane.yaml
+          test -s /tmp/dusk-control-plane.yaml
+          helm template dusk-control-plane deploy/helm/dusk-control-plane \
+            --namespace dusk-system \
+            --set externalSecret.enabled=true \
+            --set externalSecret.secretStoreRef.name=ci-store \
+            --set 'externalSecret.data[0].secretKey=database-url' \
+            --set 'externalSecret.data[0].remoteRef.key=ci/database-url' \
+            --set ingress.enabled=true \
+            --set ingress.className=nginx \
+            --set ingress.tlsSecretName=dusk-tls \
+            > /tmp/dusk-control-plane-first-install.yaml
+          python scripts/validate_control_plane_deployment.py first-install \
+            /tmp/dusk-control-plane-first-install.yaml
 
   security-gate:
     if: always()
-    needs:
-      - dco
-      - lint
-      - typecheck
-      - security
-      - deadcode
-      - secrets
-      - workflow-security
-      - semgrep
-      - codeql
-      - contract
-      - doc-consistency
-      - test
-      - compatibility
-      - example-lint
-      - example-typecheck
-      - example-security
-      - container-security
-      - example-deadcode
-      - example-test
+    needs: [correctness, compatibility, security-tools, codeql, containers, deployment-manifests]
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - name: Require every CI and security result
-        env:
-          NEEDS_JSON: ${{ toJSON(needs) }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with: {python-version: "3.12"}
+      - run: pip install PyYAML
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with: {pattern: "*-results", path: all-results, merge-multiple: true}
+      - env: {NEEDS_JSON: "${{ toJSON(needs) }}"}
         run: |
           failures=$(jq -r 'to_entries[] | select(.value.result != "success") | "\(.key)=\(.value.result)"' <<<"$NEEDS_JSON")
-          if [ -n "$failures" ]; then
-            echo "Required checks did not succeed:"
-            echo "$failures"
-            exit 1
-          fi
-          echo "All required CI and security checks succeeded."
+          test -z "$failures" || { echo "$failures"; exit 1; }
+          python scripts/ci/control.py aggregate --lane pr --results all-results

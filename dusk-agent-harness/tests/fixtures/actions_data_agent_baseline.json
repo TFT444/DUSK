@@ -1,0 +1,56 @@
+[
+  {
+    "agent_id": "data-agent",
+    "timestamp": "2023-11-14T22:13:20+00:00",
+    "action_type": "unknown",
+    "target": "bucket-approved-reports",
+    "change": {"before": null, "after": {"operation": "read", "destination": "internal"}},
+    "source": "generic",
+    "raw_ref": "evt-data-0001"
+  },
+  {
+    "agent_id": "data-agent",
+    "timestamp": "2023-11-14T22:14:20+00:00",
+    "action_type": "unknown",
+    "target": "bucket-approved-reports",
+    "change": {"before": null, "after": {"operation": "list"}},
+    "source": "generic",
+    "raw_ref": "evt-data-0002"
+  },
+  {
+    "agent_id": "data-agent",
+    "timestamp": "2023-11-14T22:15:20+00:00",
+    "action_type": "unknown",
+    "target": "bucket-approved-staging",
+    "change": {"before": null, "after": {"operation": "read", "destination": "internal"}},
+    "source": "generic",
+    "raw_ref": "evt-data-0003"
+  },
+  {
+    "agent_id": "data-agent",
+    "timestamp": "2023-11-14T22:16:20+00:00",
+    "action_type": "unknown",
+    "target": "bucket-approved-archive",
+    "change": {"before": null, "after": {"operation": "read"}},
+    "source": "generic",
+    "raw_ref": "evt-data-0004"
+  },
+  {
+    "agent_id": "data-agent",
+    "timestamp": "2023-11-14T22:17:20+00:00",
+    "action_type": "unknown",
+    "target": "bucket-approved-reports",
+    "change": {"before": {"status": "active", "operation": "archive"}, "after": null},
+    "source": "generic",
+    "raw_ref": "evt-data-0005"
+  },
+  {
+    "agent_id": "data-agent",
+    "timestamp": "2023-11-14T22:18:20+00:00",
+    "action_type": "unknown",
+    "target": "bucket-approved-staging",
+    "change": {"before": {"status": "expired"}, "after": null},
+    "source": "generic",
+    "raw_ref": "evt-data-0006"
+  }
+]

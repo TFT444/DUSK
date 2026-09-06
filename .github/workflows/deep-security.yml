@@ -1,113 +1,94 @@
 name: Deep security
-
 on:
   schedule:
     - cron: "23 3 * * 1"
   workflow_dispatch:
-
 permissions:
   contents: read
-
 concurrency:
   group: deep-security-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  full-history-secrets:
+  general:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with: { fetch-depth: 0 }
-      - name: Scan all reachable Git history
-        run: |
-          docker run --rm -v "$PWD:/repo" -w /repo \
-            ghcr.io/gitleaks/gitleaks@sha256:cdbb7c955abce02001a9f6c9f602fb195b7fadc1e812065883f695d1eeaba854 \
-            git /repo --no-banner --redact --exit-code 1 \
-            --report-format json --report-path deep-gitleaks.json
-      - name: Upload full-history scan evidence
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: deep-history-secret-evidence
-          path: deep-gitleaks.json
-          if-no-files-found: warn
-          retention-days: 30
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: {fetch-depth: 0}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with: {python-version: "3.12", cache: pip, cache-dependency-path: pyproject.toml}
+      - run: |
+          pip install -e ".[dev]" atheris pip-audit pip-licenses 'mutmut==2.4.5'
+          pip install --require-hashes -r ci/example-requirements.lock
+      - run: sh scripts/ci/deep_controls.sh general
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with: {name: deep-general-results, path: results/, if-no-files-found: error, retention-days: 30}
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with: {name: deep-general-evidence, path: deep-evidence/, if-no-files-found: warn, retention-days: 30}
 
-  fresh-dependency-and-container-scan:
+  mutation:
     runs-on: ubuntu-latest
+    timeout-minutes: 22
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {group: policy-mutation, control: SEC-032}
+          - {group: auth-mutation, control: SEC-033}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: requirements.txt
-      - name: Re-audit dependencies against current vulnerability data
-        run: |
-          pip install pip-audit
-          pip-audit -r requirements.txt --format json --output deep-pip-audit.json
-      - name: Rebuild project images without layer cache
-        run: >
-          docker compose --project-name agent-action-monitor
-          -f examples/agent-action-monitor/compose.yml build
-          --pull --no-cache dusk-gate agent-demo mock-prod
-      - name: Scan rebuilt gate image
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          image-ref: agent-action-monitor-dusk-gate
-          scanners: vuln,secret
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: 1
-          format: json
-          output: deep-gate-trivy.json
-      - name: Scan rebuilt agent image
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          image-ref: agent-action-monitor-agent-demo
-          scanners: vuln,secret
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: 1
-          format: json
-          output: deep-agent-trivy.json
-      - name: Scan rebuilt mock target image
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          image-ref: agent-action-monitor-mock-prod
-          scanners: vuln,secret
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: 1
-          format: json
-          output: deep-mock-trivy.json
-      - name: Re-run authenticated watch and enforce evidence
-        working-directory: examples/agent-action-monitor
-        env:
-          DUSK_GATE_API_KEY: scheduled-ci-only-not-a-secret
-        run: |
-          sh ./scripts/run_ci_sandbox.sh watch
-          sh ./scripts/run_ci_sandbox.sh enforce
-      - name: Upload deep scan and sandbox evidence
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: deep-security-evidence
-          path: |
-            deep-pip-audit.json
-            deep-*-trivy.json
-            examples/agent-action-monitor/ci-logs/
-          if-no-files-found: warn
-          retention-days: 30
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with: {python-version: "3.12", cache: pip, cache-dependency-path: pyproject.toml}
+      - run: |
+          pip install -e ".[dev]" 'mutmut==2.4.5'
+          pip install --require-hashes -r ci/example-requirements.lock
+      - run: sh scripts/ci/deep_controls.sh "${{ matrix.group }}"
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with: {name: "deep-${{ matrix.group }}-results", path: results/, if-no-files-found: error, retention-days: 30}
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with: {name: "deep-${{ matrix.group }}-evidence", path: deep-evidence/, if-no-files-found: warn, retention-days: 30}
+
+  scorecard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with: {python-version: "3.12"}
+      - run: pip install PyYAML
+      - env:
+          # The official action entrypoint consumes INPUT_REPO_TOKEN internally.
+          # The GITHUB_TOKEN fallback deliberately fails classic protection reads.
+          SCORECARD_TOKEN: "${{ secrets.SCORECARD_TOKEN || github.token }}"
+        run: sh scripts/ci/deep_controls.sh scorecard
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with: {name: deep-scorecard-results, path: results/, if-no-files-found: error, retention-days: 30}
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with: {name: deep-scorecard-evidence, path: deep-evidence/, if-no-files-found: warn, retention-days: 30}
 
   deep-security-gate:
     if: always()
-    needs: [full-history-secrets, fresh-dependency-and-container-scan]
+    needs: [general, mutation, scorecard]
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - name: Fail visibly when a scheduled scan fails
-        env:
-          NEEDS_JSON: ${{ toJSON(needs) }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with: {python-version: "3.12"}
+      - run: pip install PyYAML
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with: {pattern: "deep-*-results", path: results, merge-multiple: true}
+      - env: {NEEDS_JSON: "${{ toJSON(needs) }}"}
         run: |
+          aggregate_rc=0
+          python scripts/ci/control.py aggregate --lane deep --results results || aggregate_rc=$?
           failures=$(jq -r 'to_entries[] | select(.value.result != "success") | "\(.key)=\(.value.result)"' <<<"$NEEDS_JSON")
           test -z "$failures" || { echo "$failures"; exit 1; }
+          test "$aggregate_rc" -eq 0

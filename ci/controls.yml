@@ -1,0 +1,106 @@
+version: 1
+controls:
+  # Pull-request correctness and merge-safety controls (48)
+  - {id: PR-001, description: DCO sign-off, tool: check_dco.py, lane: pr, blocking: true, applicability: always}
+  - {id: PR-002, description: Conflict markers, tool: repository-checks, lane: pr, blocking: true, applicability: always}
+  - {id: PR-003, description: Unsafe symbolic links, tool: repository-checks, lane: pr, blocking: true, applicability: always}
+  - {id: PR-004, description: Unexpected binary files, tool: repository-checks, lane: pr, blocking: true, applicability: code_changes}
+  - {id: PR-005, description: Oversized files, tool: repository-checks, lane: pr, blocking: true, applicability: always}
+  - {id: PR-006, description: Committed generated artifacts, tool: repository-checks, lane: pr, blocking: true, applicability: code_changes}
+  - {id: PR-007, description: Case-insensitive filename collisions, tool: repository-checks, lane: pr, blocking: true, applicability: always}
+  - {id: PR-008, description: UTF-8 encoding, tool: repository-checks, lane: pr, blocking: true, applicability: always}
+  - {id: PR-009, description: LF line endings, tool: repository-checks, lane: pr, blocking: true, applicability: always}
+  - {id: PR-010, description: Licence metadata, tool: repository-checks, lane: pr, blocking: true, applicability: always}
+  - {id: PR-011, description: Ruff errors and warnings, tool: ruff, lane: pr, blocking: true, applicability: code_changes}
+  - {id: PR-012, description: Ruff imports, tool: ruff, lane: pr, blocking: true, applicability: code_changes}
+  - {id: PR-013, description: Ruff naming, tool: ruff, lane: pr, blocking: true, applicability: code_changes}
+  - {id: PR-014, description: Ruff bugbear and security, tool: ruff, lane: pr, blocking: true, applicability: code_changes}
+  - {id: PR-015, description: Ruff formatting, tool: ruff, lane: pr, blocking: true, applicability: code_changes}
+  - {id: PR-016, description: Cyclomatic complexity, tool: ruff-c90, lane: pr, blocking: true, applicability: code_changes}
+  - {id: PR-017, description: Annotation coverage, tool: ruff-ann, lane: pr, blocking: true, applicability: code_changes}
+  - {id: PR-018, description: Suppression validation, tool: suppression-check, lane: pr, blocking: true, applicability: always}
+  - {id: PR-019, description: Dead code, tool: vulture, lane: pr, blocking: true, applicability: code_changes}
+  - {id: PR-020, description: Stale TODO policy, tool: repository-checks, lane: pr, blocking: true, applicability: always}
+  - {id: PR-021, description: Strict MyPy root package, tool: mypy, lane: pr, blocking: true, applicability: code_changes}
+  - {id: PR-022, description: Strict MyPy example package, tool: mypy, lane: pr, blocking: true, applicability: code_changes}
+  - {id: PR-023, description: Python 3.11 syntax floor, tool: compileall, lane: pr, blocking: true, applicability: code_changes}
+  - {id: PR-024, description: OpenAPI contract, tool: openapi-spec-validator, lane: pr, blocking: true, applicability: code_changes}
+  - {id: PR-025, description: Compose contract, tool: docker-compose, lane: pr, blocking: true, applicability: code_changes}
+  - {id: PR-026, description: Configuration schema, tool: pytest, lane: pr, blocking: true, applicability: code_changes}
+  - {id: PR-027, description: Policy schema, tool: pytest, lane: pr, blocking: true, applicability: code_changes}
+  - {id: PR-028, description: Documentation drift, tool: check_config_docs.py, lane: pr, blocking: true, applicability: always}
+  - {id: PR-029, description: Public API compatibility, tool: public-api-check, lane: pr, blocking: true, applicability: code_changes}
+  - {id: PR-030, description: Root unit tests, tool: pytest, lane: pr, blocking: true, applicability: code_changes}
+  - {id: PR-031, description: Example unit tests, tool: pytest, lane: pr, blocking: true, applicability: code_changes}
+  - {id: PR-032, description: API integration, tool: pytest, lane: pr, blocking: true, applicability: code_changes}
+  - {id: PR-033, description: Authentication failure paths, tool: pytest, lane: pr, blocking: true, applicability: code_changes}
+  - {id: PR-034, description: Watch mode behavior, tool: pytest, lane: pr, blocking: true, applicability: code_changes}
+  - {id: PR-035, description: Enforce mode behavior, tool: pytest, lane: pr, blocking: true, applicability: code_changes}
+  - {id: PR-036, description: Downstream state immutability, tool: pytest, lane: pr, blocking: true, applicability: code_changes}
+  - {id: PR-037, description: Audit persistence, tool: pytest, lane: pr, blocking: true, applicability: code_changes}
+  - {id: PR-038, description: Integration fallback, tool: pytest, lane: pr, blocking: true, applicability: code_changes}
+  - {id: PR-039, description: Property tests, tool: hypothesis, lane: pr, blocking: true, applicability: code_changes}
+  - {id: PR-040, description: Parser fuzz smoke, tool: atheris-smoke, lane: pr, blocking: true, applicability: code_changes}
+  - {id: PR-041, description: Line coverage, tool: coverage.py, lane: pr, blocking: true, applicability: code_changes}
+  - {id: PR-042, description: Branch coverage, tool: coverage.py, lane: pr, blocking: true, applicability: code_changes}
+  - {id: PR-043, description: Python 3.11 compatibility, tool: pytest, lane: pr, blocking: true, applicability: code_changes}
+  - {id: PR-044, description: Python 3.12 compatibility, tool: pytest, lane: pr, blocking: true, applicability: code_changes}
+  - {id: PR-045, description: Action workflow syntax, tool: actionlint, lane: pr, blocking: true, applicability: always}
+  - {id: PR-046, description: Workflow security analysis, tool: zizmor, lane: pr, blocking: true, applicability: always}
+  - {id: PR-047, description: Control catalogue validity, tool: control.py, lane: pr, blocking: true, applicability: always}
+  - {id: PR-048, description: Fail-closed result aggregation, tool: control.py, lane: pr, blocking: true, applicability: always}
+  # Security and supply-chain controls (34)
+  - {id: SEC-001, description: CodeQL security-extended, tool: codeql, lane: pr, blocking: true, applicability: code_changes}
+  - {id: SEC-002, description: Bandit high confidence, tool: bandit, lane: pr, blocking: true, applicability: code_changes}
+  - {id: SEC-003, description: Semgrep pinned community rules, tool: semgrep, lane: pr, blocking: true, applicability: code_changes}
+  - {id: SEC-004, description: Command execution sinks, tool: semgrep, lane: pr, blocking: true, applicability: code_changes}
+  - {id: SEC-005, description: Unsafe deserialization, tool: semgrep, lane: pr, blocking: true, applicability: code_changes}
+  - {id: SEC-006, description: SSRF defenses, tool: semgrep, lane: pr, blocking: true, applicability: code_changes}
+  - {id: SEC-007, description: Path traversal defenses, tool: semgrep, lane: pr, blocking: true, applicability: code_changes}
+  - {id: SEC-008, description: Authentication fail-closed, tool: semgrep, lane: pr, blocking: true, applicability: code_changes}
+  - {id: SEC-009, description: TLS verification, tool: semgrep, lane: pr, blocking: true, applicability: code_changes}
+  - {id: SEC-010, description: Sensitive error leakage, tool: semgrep, lane: pr, blocking: true, applicability: code_changes}
+  - {id: SEC-011, description: PR commit-range secrets, tool: gitleaks, lane: pr, blocking: true, applicability: always}
+  - {id: SEC-012, description: Secret baseline drift, tool: detect-secrets, lane: pr, blocking: true, applicability: always}
+  - {id: SEC-013, description: Root Python vulnerabilities, tool: pip-audit, lane: pr, blocking: true, applicability: dependency_changes}
+  - {id: SEC-014, description: Example Python vulnerabilities, tool: pip-audit, lane: pr, blocking: true, applicability: dependency_changes}
+  - {id: SEC-015, description: Root OSV vulnerabilities, tool: osv-scanner, lane: deep, blocking: true, applicability: always}
+  - {id: SEC-016, description: Example OSV vulnerabilities, tool: osv-scanner, lane: deep, blocking: true, applicability: always}
+  - {id: SEC-017, description: Hashed root CI lock, tool: pip, lane: pr, blocking: true, applicability: dependency_changes}
+  - {id: SEC-018, description: Hashed example CI lock, tool: pip, lane: pr, blocking: true, applicability: dependency_changes}
+  - {id: SEC-019, description: Dependency licence allowlist, tool: pip-licenses, lane: deep, blocking: true, applicability: always}
+  - {id: SEC-020, description: Dependency lock consistency, tool: lock-check, lane: pr, blocking: true, applicability: dependency_changes}
+  - {id: SEC-021, description: Immutable action pins, tool: workflow-policy, lane: pr, blocking: true, applicability: always}
+  - {id: SEC-022, description: Minimum token permissions, tool: workflow-policy, lane: pr, blocking: true, applicability: always}
+  - {id: SEC-023, description: Safe workflow triggers, tool: workflow-policy, lane: pr, blocking: true, applicability: always}
+  - {id: SEC-024, description: Script injection prevention, tool: zizmor, lane: pr, blocking: true, applicability: always}
+  - {id: SEC-025, description: Job timeout enforcement, tool: workflow-policy, lane: pr, blocking: true, applicability: always}
+  - {id: SEC-026, description: Dependabot configuration, tool: dependabot-validator, lane: pr, blocking: true, applicability: always}
+  - {id: SEC-027, description: Full-history secrets, tool: gitleaks, lane: deep, blocking: true, applicability: always}
+  - {id: SEC-028, description: Fresh vulnerability databases, tool: scanner-bootstrap, lane: deep, blocking: true, applicability: always}
+  - {id: SEC-029, description: OpenSSF Scorecard, tool: scorecard-cli, lane: deep, blocking: true, applicability: always}
+  - {id: SEC-030, description: Extended property tests, tool: hypothesis, lane: deep, blocking: true, applicability: always}
+  - {id: SEC-031, description: Extended parser fuzzing, tool: atheris, lane: deep, blocking: true, applicability: always}
+  - {id: SEC-032, description: Policy mutation score, tool: mutmut, lane: deep, blocking: true, applicability: always}
+  - {id: SEC-033, description: Authentication mutation score, tool: mutmut, lane: deep, blocking: true, applicability: always}
+  - {id: SEC-034, description: Suppression expiry, tool: suppression-check, lane: deep, blocking: true, applicability: always}
+  # Container and runtime controls (10; documentation-only N/A is permitted)
+  - {id: CTR-001, description: Hadolint Dockerfiles, tool: hadolint, lane: pr, blocking: true, applicability: non_docs}
+  - {id: CTR-002, description: Trivy image vulnerabilities, tool: trivy, lane: pr, blocking: true, applicability: non_docs}
+  - {id: CTR-003, description: Trivy secrets and misconfiguration, tool: trivy, lane: pr, blocking: true, applicability: non_docs}
+  - {id: CTR-004, description: Non-root runtime users, tool: container-structure-test, lane: pr, blocking: true, applicability: non_docs}
+  - {id: CTR-005, description: Dropped Linux capabilities, tool: docker, lane: pr, blocking: true, applicability: non_docs}
+  - {id: CTR-006, description: Read-only filesystem compatibility, tool: docker, lane: pr, blocking: true, applicability: non_docs}
+  - {id: CTR-007, description: Container health checks, tool: docker-inspect, lane: pr, blocking: true, applicability: non_docs}
+  - {id: CTR-008, description: No build tooling in runtime, tool: container-diff, lane: pr, blocking: true, applicability: non_docs}
+  - {id: CTR-009, description: Syft image SBOM, tool: syft, lane: pr, blocking: true, applicability: non_docs}
+  - {id: CTR-010, description: Grype SBOM vulnerabilities, tool: grype, lane: pr, blocking: true, applicability: non_docs}
+  # Release artifact integrity and provenance controls (8)
+  - {id: REL-001, description: Verified annotated release tag, tool: gh, lane: release, blocking: true, applicability: always}
+  - {id: REL-002, description: Version and tag agreement, tool: check_release_version.py, lane: release, blocking: true, applicability: always}
+  - {id: REL-003, description: Clean wheel and sdist, tool: build, lane: release, blocking: true, applicability: always}
+  - {id: REL-004, description: Distribution metadata validation, tool: twine, lane: release, blocking: true, applicability: always}
+  - {id: REL-005, description: Reproducible artifact builds, tool: sha256sum, lane: release, blocking: true, applicability: always}
+  - {id: REL-006, description: CycloneDX and SPDX SBOMs, tool: cyclonedx-syft, lane: release, blocking: true, applicability: always}
+  - {id: REL-007, description: SHA-256 checksums, tool: sha256sum, lane: release, blocking: true, applicability: always}
+  - {id: REL-008, description: Build provenance verification, tool: gh-attestation, lane: release, blocking: true, applicability: always}

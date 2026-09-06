@@ -1,123 +1,99 @@
 name: Release
-
 on:
   push:
     tags: ["v*"]
-
+  workflow_dispatch:
+    inputs:
+      release_ref:
+        description: Existing verified annotated tag used for a dry run
+        required: true
+        type: string
+      publish:
+        description: Publish after verification
+        required: true
+        default: false
+        type: boolean
 permissions:
   contents: read
-
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  verify-build-release:
+  release-controls:
     runs-on: ubuntu-latest
-    permissions:
-      # Create the GitHub release only after every gate succeeds.
-      contents: write
-      # Request an OIDC identity for artifact provenance.
-      id-token: write
-      # Publish build-provenance attestations for the release files.
-      attestations: write
+    timeout-minutes: 18
+    permissions: {contents: read, id-token: write, attestations: write}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with: { fetch-depth: 0 }
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: "3.12"
-
-      - name: Require a GitHub-verified annotated tag
-        env:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: {fetch-depth: 0}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with: {python-version: "3.12"}
+      - run: pip install build twine pip-audit PyYAML
+      - env:
+          RELEASE_REF: ${{ inputs.release_ref || github.ref_name }}
           GH_TOKEN: ${{ github.token }}
-        run: |
-          tag_ref=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$GITHUB_REF_NAME")
-          object_type=$(jq -r '.object.type' <<<"$tag_ref")
-          object_sha=$(jq -r '.object.sha' <<<"$tag_ref")
-          if [ "$object_type" != "tag" ]; then
-            echo "Release tags must be signed annotated tags; got $object_type."
-            exit 1
-          fi
-          verified=$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$object_sha" --jq '.verification.verified')
-          if [ "$verified" != "true" ]; then
-            echo "Release tag $GITHUB_REF_NAME is not cryptographically verified by GitHub."
-            exit 1
-          fi
-      - name: Require the release commit to be on main
-        run: |
-          git fetch origin main
-          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
-            echo "Release tag $GITHUB_REF_NAME does not point to a commit on main."
-            exit 1
-          fi
-
-      - name: Install release and test tooling
-        run: python -m pip install --upgrade build pip-audit twine
-      - name: Verify release version
-        run: python scripts/check_release_version.py "$GITHUB_REF_NAME"
-      - name: Run root tests
-        run: |
-          pip install -e ".[dev]"
-          pytest --cov=src/dusk --cov-fail-under=70 --cov-report=term-missing
-      - name: Run example tests
-        working-directory: examples/agent-action-monitor
-        run: |
-          pip install -e ".[dev]"
-          pip install -r agent-demo/requirements.txt -r mock-prod/requirements.txt
-          pytest
-      - name: Audit declared dependencies
-        run: |
-          pip-audit -r requirements.txt
-          python -m venv /tmp/example-audit
-          /tmp/example-audit/bin/pip install -q -e examples/agent-action-monitor \
-            -r examples/agent-action-monitor/agent-demo/requirements.txt \
-            -r examples/agent-action-monitor/mock-prod/requirements.txt
-          /tmp/example-audit/bin/pip freeze | grep -v '^-e ' > /tmp/example-requirements.txt
-          pip-audit -r /tmp/example-requirements.txt
-
-      - name: Build release container image
-        run: docker build -t "dusk-release:${GITHUB_REF_NAME}" examples/agent-action-monitor
-      - name: Scan release container image
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          image-ref: dusk-release:${{ github.ref_name }}
-          scanners: vuln,secret
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: 1
-
-      - name: Build source and wheel artifacts
-        run: python -m build
-      - name: Validate release artifact metadata
-        run: python -m twine check dist/*.whl dist/*.tar.gz
-      - name: Generate CycloneDX SBOM
-        run: pip-audit -r requirements.txt --format cyclonedx-json --output dist/dusk-sbom.json
-      - name: Generate checksums
-        run: |
-          cd dist
-          sha256sum ./*.whl ./*.tar.gz ./dusk-sbom.json > SHA256SUMS
-      - name: Attest exact release artifacts
-        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        run: >-
+          python scripts/ci/run_group.py --results results/release
+          --controls REL-001 REL-002 REL-003 REL-004 REL-005 REL-006 REL-007 --
+          sh scripts/ci/release_controls.sh "$RELEASE_REF"
+      - id: attest
+        continue-on-error: true
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: |
             dist/*.whl
             dist/*.tar.gz
-            dist/dusk-sbom.json
+            dist/*.json
             dist/SHA256SUMS
-      - name: Upload workflow artifacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: dusk-${{ github.ref_name }}-release-artifacts
-          path: dist/
-          if-no-files-found: error
-          retention-days: 30
-      - name: Publish GitHub release after every gate passes
-        env:
+      - env:
+          OUTCOME: "${{ steps.attest.outcome }}"
+          GH_TOKEN: "${{ github.token }}"
+        run: |
+          status=FAIL
+          if test "$OUTCOME" = success; then
+            status=PASS
+            for artifact in dist/*; do
+              gh attestation verify "$artifact" --repo "$GITHUB_REPOSITORY" || status=FAIL
+            done
+          fi
+          python scripts/ci/control.py record --control REL-008 --status "$status" --output results/release/REL-008.json --details "attestation creation=$OUTCOME verification=$status"
+          test "$status" = PASS
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with: {name: release-control-results, path: "results/", if-no-files-found: error, retention-days: 30}
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with: {name: release-artifacts, path: "dist/", if-no-files-found: error, retention-days: 30}
+
+  release-gate:
+    if: always()
+    needs: [release-controls]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with: {python-version: "3.12"}
+      - run: pip install PyYAML
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with: {name: release-control-results, path: results}
+      - env: {UPSTREAM: "${{ needs.release-controls.result }}"}
+        run: |
+          test "$UPSTREAM" = success
+          python scripts/validate_provider_certification.py \
+            docs/evidence/provider-certification.json
+          python scripts/ci/control.py aggregate --lane release --results results
+
+  publish:
+    needs: [release-gate]
+    if: github.event_name == 'push' || inputs.publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {contents: write}
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with: {name: release-artifacts, path: dist}
+      - env:
           GH_TOKEN: ${{ github.token }}
-        run: >
-          gh release create "$GITHUB_REF_NAME" dist/*
-          --repo "$GITHUB_REPOSITORY"
-          --verify-tag
-          --generate-notes
-          --title "DUSK $GITHUB_REF_NAME"
+          RELEASE_REF: ${{ inputs.release_ref || github.ref_name }}
+        run: gh release create "$RELEASE_REF" dist/* --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes --title "DUSK $RELEASE_REF"

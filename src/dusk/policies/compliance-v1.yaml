@@ -1,0 +1,66 @@
+catalogue_id: dusk-compliance
+version: "1.0"
+claim_boundary: >-
+  This catalogue is an implementation traceability map. It does not claim
+  certification, attestation, or complete coverage of any framework.
+controls:
+  - id: DUSK-COMP-001
+    title: Fail closed on missing or invalid authentication
+    status: implemented
+    frameworks: [OWASP, "NIST AI RMF", "NIST CSF", "ISO 27001", "SOC 2", "CIS Controls"]
+    evidence: [src/dusk/config.py, tests/test_config.py]
+    notes: Authentication failures are denied unless anonymous mode is explicitly enabled.
+  - id: DUSK-COMP-002
+    title: Reject expired, replayed, or invalid action permits
+    status: partial
+    frameworks: [OWASP, "NIST AI RMF", "NIST CSF", "ISO 27001", "SOC 2"]
+    evidence: [src/dusk/policies/enterprise-v1.yaml, tests/test_enterprise_policies.py]
+    notes: Current policy checks cover permit validity, expiry, replay, and action binding; cryptographic permits remain follow-up work.
+  - id: DUSK-COMP-003
+    title: Deny actions outside approved policy scope
+    status: implemented
+    frameworks: [OWASP, "NIST AI RMF", "NIST CSF", "ISO 27001", "SOC 2", "CIS Controls"]
+    evidence: [src/dusk/policies/enterprise-v1.yaml, tests/test_enterprise_policies.py]
+    notes: Deny rules take precedence over approval signals.
+  - id: DUSK-COMP-004
+    title: Prevent cross-tenant access
+    status: implemented
+    frameworks: [OWASP, "NIST AI RMF", "NIST CSF", "ISO 27001", "SOC 2"]
+    evidence: [src/dusk/policies/enterprise-v1.yaml, tests/test_enterprise_policies.py]
+    notes: Runtime tenant fields are compared before an action is accepted.
+  - id: DUSK-COMP-005
+    title: Keep secrets and sensitive payloads out of evidence
+    status: partial
+    frameworks: [OWASP, "NIST AI RMF", "NIST CSF", "ISO 27001", "SOC 2"]
+    evidence: [docs/enterprise-policy-pack.md, docs/production-hardening.md]
+    notes: Evidence records bounded metadata; a full retention and redaction service is tracked separately.
+  - id: DUSK-COMP-006
+    title: Preserve tamper-evident decision records
+    status: partial
+    frameworks: [OWASP, "NIST AI RMF", "NIST CSF", "ISO 27001", "SOC 2"]
+    evidence: [docs/enterprise-policy-pack.md, docs/real-agent-sandbox-live-validation-2026-08-27.md]
+    notes: Evidence requirements are documented and protected-run manifests exist; complete atomic durable persistence is tracked by issue #197.
+  - id: DUSK-COMP-007
+    title: Ensure blocked actions do not reach downstream execution
+    status: implemented
+    frameworks: [OWASP, "NIST AI RMF", "NIST CSF", "ISO 27001", "SOC 2", "CIS Controls"]
+    evidence: [src/dusk/actions/analyse.py, tests/test_actions_gate.py]
+    notes: Enforce mode blocks refused actions at the gate boundary.
+  - id: DUSK-COMP-008
+    title: Preserve least-privilege provider access
+    status: implemented
+    frameworks: ["NIST CSF", "ISO 27001", "SOC 2", "CIS Controls"]
+    evidence: [docs/production-hardening.md, docs/real-agent-sandbox-live-validation-2026-08-27.md]
+    notes: Provider and deployment guidance requires scoped credentials and protected environments.
+  - id: DUSK-COMP-009
+    title: Require evidence for every protected model run
+    status: implemented
+    frameworks: [OWASP, "NIST AI RMF", "NIST CSF", "ISO 27001", "SOC 2"]
+    evidence: [docs/real-agent-sandbox-live-validation-2026-08-27.md, docs/owasp-technical-evidence.json]
+    notes: Protected validation requires model identity, counts, manifests, and nonempty evidence.
+  - id: DUSK-COMP-010
+    title: Detect and report incomplete validation
+    status: implemented
+    frameworks: [OWASP, "NIST AI RMF", "NIST CSF", "SOC 2"]
+    evidence: [docs/real-agent-sandbox-live-validation-2026-08-27.md, docs/owasp-technical-evidence.json]
+    notes: Failures, errors, skips, missing manifests, and invalid evidence invalidate a live-validation claim.

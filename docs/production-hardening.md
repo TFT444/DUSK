@@ -1,8 +1,8 @@
 # Production Hardening
 
-The agent action monitor stack is a runnable local example, not a production
-deployment template. Use the controls below before placing a DUSK gate on a
-real action path.
+The DUSK Production Agent Harness is a runnable local validation stack, not a
+production deployment template. Use the controls below before placing a DUSK
+gate on a real action path.
 
 ## Required controls
 

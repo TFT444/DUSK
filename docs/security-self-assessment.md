@@ -40,8 +40,8 @@ an HTTP gate and optional inference and workflow integrations.
 
 - `src/dusk/actions/` and the example copy implement baseline and verdict logic
 - `src/dusk/sensor/pcap.py` parses untrusted packet captures
-- `examples/agent-action-monitor/src/dusk/api.py` defines the HTTP boundary
-- `examples/agent-action-monitor/src/dusk/trace/` handles optional outbound calls
+- `dusk-agent-harness/src/dusk/api.py` defines the HTTP boundary
+- `dusk-agent-harness/src/dusk/trace/` handles optional outbound calls
 - `.github/workflows/` defines build and release trust
 
 ## Known limitations

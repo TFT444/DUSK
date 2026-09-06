@@ -1,0 +1,136 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  IAM role and optional GitHub OIDC provider for the DUSK real-agent validation
+  workflow. Trust is restricted to the ShieldTech-Ltd/DUSK repository's
+  real-agent GitHub Actions environment only. Pull requests, arbitrary branches,
+  forks, and other environments cannot assume this role.
+  No account IDs are hard-coded. Deploy with aws cloudformation deploy.
+
+Parameters:
+  GitHubOrg:
+    Type: String
+    Default: ShieldTech-Ltd
+    Description: GitHub organisation name (case-sensitive)
+  GitHubRepo:
+    Type: String
+    Default: DUSK
+    Description: Repository name without owner prefix (case-sensitive)
+  GitHubEnvironment:
+    Type: String
+    Default: real-agent
+    Description: GitHub Actions environment name (must match exactly)
+  BedrockModelId:
+    Type: String
+    Default: us.anthropic.claude-sonnet-4-6
+    Description: >
+      Bedrock inference profile ID. Must be available in this account and region.
+  BedrockFoundationModelId:
+    Type: String
+    Default: anthropic.claude-sonnet-4-6
+    Description: Underlying foundation model ID required by cross-region inference.
+  RoleName:
+    Type: String
+    Default: DuskRealAgentBedrockRole
+    Description: Name for the IAM role
+  ExistingOidcProviderArn:
+    Type: String
+    Default: ""
+    Description: >
+      ARN of an existing GitHub Actions OIDC provider
+      (token.actions.githubusercontent.com) in this AWS account.
+      Leave blank to create a new provider. Supply this value if one already
+      exists to avoid the 'EntityAlreadyExists' error - AWS allows only one
+      OIDC provider per URL per account.
+
+Conditions:
+  CreateOidcProvider:
+    Fn::Equals:
+      - Ref: ExistingOidcProviderArn
+      - ""
+
+Resources:
+  GitHubOidcProvider:
+    Condition: CreateOidcProvider
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList:
+        - sts.amazonaws.com
+      ThumbprintList:
+        # SHA-1 fingerprints of GitHub's OIDC CA certificates.
+        # AWS validates JWKS signatures independently; these are required by
+        # the CloudFormation resource type but not the primary auth mechanism.
+        - 6938fd4d98bab03faadb97b34396831e3780aea1
+        - 1c58a3a8518e8759bf075b76b750d4f2df264fcd
+
+  DuskBedrockRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName:
+        Ref: RoleName
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated:
+                Fn::If:
+                  - CreateOidcProvider
+                  - Fn::GetAtt:
+                      - GitHubOidcProvider
+                      - Arn
+                  - Ref: ExistingOidcProviderArn
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                "token.actions.githubusercontent.com:aud": sts.amazonaws.com
+                "token.actions.githubusercontent.com:sub":
+                  Fn::Sub: "repo:${GitHubOrg}/${GitHubRepo}:environment:${GitHubEnvironment}"
+      Policies:
+        - PolicyName: BedrockInvokeModelOnly
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: bedrock:ListInferenceProfiles
+                Resource: "*"
+              - Effect: Allow
+                Action: bedrock:InvokeModel
+                Resource:
+                  # Claude 4.x models require inference profiles (not direct
+                  # foundation model ARNs). Inference profile ARNs include the
+                  # account ID (single colon between region and account).
+                  - Fn::Sub: "arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/${BedrockModelId}"
+                  # Converse authorizes both the inference profile and the
+                  # foundation model in every destination region advertised
+                  # by the US cross-region inference profile.
+                  - Fn::Sub: "arn:aws:bedrock:us-east-1::foundation-model/${BedrockFoundationModelId}"
+                  - Fn::Sub: "arn:aws:bedrock:us-east-2::foundation-model/${BedrockFoundationModelId}"
+                  - Fn::Sub: "arn:aws:bedrock:us-west-2::foundation-model/${BedrockFoundationModelId}"
+
+Outputs:
+  RoleArn:
+    Value:
+      Fn::GetAtt:
+        - DuskBedrockRole
+        - Arn
+    Description: ARN of the IAM role for DUSK real-agent workflow
+
+  OidcProviderArn:
+    Value:
+      Fn::If:
+        - CreateOidcProvider
+        - Fn::GetAtt:
+            - GitHubOidcProvider
+            - Arn
+        - Ref: ExistingOidcProviderArn
+    Description: ARN of the GitHub OIDC provider (created here or supplied)
+
+  ModelResource:
+    Value:
+      Fn::Sub: "arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/${BedrockModelId}"
+    Description: >
+      IAM resource ARN used in the Bedrock permission. Inference profile ARN
+      format (includes account ID). Use with us.anthropic.claude-sonnet-4-6
+      or equivalent inference profile ID as BedrockModelId.

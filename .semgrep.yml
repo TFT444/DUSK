@@ -37,3 +37,39 @@ rules:
           - pattern: requests.patch(...)
           - pattern: requests.delete(...)
       - pattern-not: requests.$METHOD(..., timeout=$TIMEOUT, ...)
+
+  - id: dusk-unsafe-deserialization
+    languages: [python]
+    severity: ERROR
+    message: Never deserialize untrusted pickle data.
+    pattern-either:
+      - pattern: pickle.loads(...)
+      - pattern: pickle.load(...)
+
+  - id: dusk-tls-verification-disabled
+    languages: [python]
+    severity: ERROR
+    message: TLS certificate verification must remain enabled.
+    pattern: requests.$METHOD(..., verify=False, ...)
+
+  - id: dusk-user-controlled-file-open
+    languages: [python]
+    severity: ERROR
+    message: Resolve and validate request-derived paths before opening files.
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: request.args.get(...)
+          - pattern: request.form.get(...)
+          - pattern: request.get_json(...)
+          - pattern: request.json
+    pattern-sinks:
+      - pattern: open(...)
+
+  - id: dusk-sensitive-exception-response
+    languages: [python]
+    severity: ERROR
+    message: Do not return raw exception details to callers.
+    pattern-either:
+      - pattern: return jsonify(..., error=str($EXC), ...)
+      - pattern: 'return { ..., "error": str($EXC), ... }'

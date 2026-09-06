@@ -30,9 +30,9 @@ def main() -> int:
     versions = {
         "root project": _project_version(ROOT / "pyproject.toml"),
         "root runtime": _runtime_version(ROOT / "src/dusk/__init__.py"),
-        "example project": _project_version(ROOT / "examples/agent-action-monitor/pyproject.toml"),
-        "example runtime": _runtime_version(
-            ROOT / "examples/agent-action-monitor/src/dusk/__init__.py"
+        "production harness project": _project_version(ROOT / "dusk-agent-harness/pyproject.toml"),
+        "production harness gate": _runtime_version(
+            ROOT / "dusk-agent-harness/src/dusk/__init__.py"
         ),
     }
     expected = sys.argv[1].removeprefix("v") if len(sys.argv) == 2 else None

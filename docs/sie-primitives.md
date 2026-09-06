@@ -1,6 +1,6 @@
 # SIE primitives in the agent action gate
 
-A reference for `examples/agent-action-monitor/README.md`, shaped like
+A reference for `dusk-agent-harness/README.md`, shaped like
 `superlinked/sie`'s existing `stripe-link-fraud` example: a model lineup,
 where each primitive is actually used in this codebase, and an honest
 account of what the deterministic core still does versus what SIE adds.

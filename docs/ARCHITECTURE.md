@@ -1,15 +1,20 @@
 # DUSK architecture
 
 DUSK has two implemented evaluation paths: an offline root package and a
-self-contained HTTP gate example. Both consume the same canonical agent-action
+self-contained DUSK Production Agent Harness. Both consume the same canonical agent-action
 shape and apply per-agent behavioural analysis, but they have deliberately
 different deployment boundaries.
 
+The proposed production control-plane service is intentionally a third, separate
+boundary. Its reviewed design is recorded in
+[ADR 0001](adr/0001-production-control-plane.md). It is not described as an
+implemented capability until the corresponding production issues land.
+
 ## Current gate implementation
 
-![DUSK agent-action-monitor implementation architecture](../examples/agent-action-monitor/docs/architecture.svg)
+![DUSK Production Agent Harness architecture](../dusk-agent-harness/docs/architecture.svg)
 
-The diagram represents the runnable `examples/agent-action-monitor` stack. It
+The diagram represents the runnable `dusk-agent-harness` stack. It
 does not imply a vector database, policy repository, SIEM, cloud platform, or
 human-review service.
 
@@ -26,9 +31,9 @@ human-review service.
 - The root `dusk gate` command evaluates action files offline. It does not host
   `/v1/gate`.
 
-## Self-contained gate service
+## DUSK Production Agent Harness
 
-`examples/agent-action-monitor` owns the Flask `/v1/gate` service, Docker
+`dusk-agent-harness` owns the Flask `/v1/gate` service, Docker
 Compose stack, trusted sample baseline, prior-refusal memory, bounded in-process
 decision history, outbound webhooks, agent harness, and mock downstream target.
 
@@ -54,8 +59,10 @@ attacker from slowly teaching malicious behavior as normal.
 ## Related documentation
 
 - [Agent-action schema](action-schema.md)
-- [Agent demo walkthrough](agent-demo-walkthrough.md)
+- [Production harness walkthrough](agent-demo-walkthrough.md)
 - [SIE primitives](sie-primitives.md)
 - [Gate Docker verification](gate-docker-verification.md)
 - [Gate latency notes](gate-latency-notes.md)
 - [Threat model](threat-model.md)
+- [Production control-plane threat model](production-control-plane-threat-model.md)
+- [Control-plane API conventions](control-plane-api-conventions.md)

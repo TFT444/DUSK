@@ -1,0 +1,48 @@
+name: dusk-control-plane
+
+services:
+  postgresql:
+    profiles: [storage]
+    image: postgres:17.11-bookworm@sha256:051f7b7b3abdd564d5d1bd1e8c4b9c1b6e77087d1dd22020ede611c096a272e0
+    environment:
+      POSTGRES_DB: dusk_control_plane
+      POSTGRES_USER: dusk_control_plane
+      POSTGRES_PASSWORD: local-development-only
+    ports: ["127.0.0.1:${DUSK_CP_POSTGRES_PORT:-5432}:5432"]
+    volumes: [control-plane-postgresql:/var/lib/postgresql/data]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U dusk_control_plane -d dusk_control_plane"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    security_opt: [no-new-privileges:true]
+
+  control-plane:
+    profiles: [control-plane]
+    build:
+      context: ../..
+      dockerfile: services/control-plane/Dockerfile
+    environment:
+      DUSK_CP_ENVIRONMENT: local
+      DUSK_CP_HOST: 0.0.0.0
+      DUSK_CP_PORT: "8080"
+      DUSK_CP_API_DOCS_ENABLED: "true"
+      DUSK_CP_V2_ENABLED: "false"
+    ports: ["127.0.0.1:${DUSK_CP_HOST_PORT:-8080}:8080"]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://localhost:8080/livez', timeout=3)
+      interval: 10s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+
+volumes:
+  control-plane-postgresql:

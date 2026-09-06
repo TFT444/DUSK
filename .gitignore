@@ -18,7 +18,7 @@ env/
 htmlcov/
 .tox/
 .ua/
-examples/agent-action-monitor/ci-logs/
+dusk-agent-harness/ci-logs/
 
 # Dusk runtime artifacts
 dusk-alerts.json
@@ -29,7 +29,10 @@ trace-decisions.json
 tests/fixtures/*.pcap
 tests/fixtures/*.jsonl
 tests/fixtures/*.json
-examples/agent-action-monitor/tests/fixtures/*.json
+dusk-agent-harness/tests/fixtures/*.json
+# Hand-crafted focused baselines for Sprint 2 integration tests (not generated)
+!dusk-agent-harness/tests/fixtures/actions_role_baseline.json
+!dusk-agent-harness/tests/fixtures/actions_data_agent_baseline.json
 
 # Secrets
 .env

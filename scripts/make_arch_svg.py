@@ -9,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "docs" / "dusk-arch-demo.svg"
-SOURCE_ARCH = ROOT / "examples" / "agent-action-monitor" / "docs" / "architecture.svg"
+SOURCE_ARCH = ROOT / "dusk-agent-harness" / "docs" / "architecture.svg"
 
 
 def _logo_uri() -> str:
@@ -84,7 +84,7 @@ def build() -> str:
 
 
 def main() -> None:
-    OUT.write_text(build(), encoding="utf-8")
+    OUT.write_text(build(), encoding="utf-8", newline="\n")
     print(f"wrote {OUT} ({OUT.stat().st_size} bytes)")
 
 

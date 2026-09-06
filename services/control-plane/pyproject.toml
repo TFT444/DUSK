@@ -1,0 +1,70 @@
+[build-system]
+requires = ["setuptools>=80,<84", "wheel>=0.45,<0.48"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dusk-control-plane"
+version = "0.1.0"
+description = "Production multi-tenant security control plane for DUSK."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+authors = [{name = "Dusk contributors"}]
+dependencies = [
+    "alembic>=1.19.1,<2",
+    "asyncpg>=0.31,<1",
+    "fastapi>=0.116,<1",
+    "httpx2>=2.12,<3",
+    "opentelemetry-api>=1.36,<2",
+    "opentelemetry-exporter-otlp-proto-http>=1.36,<2",
+    "opentelemetry-sdk>=1.36,<2",
+    "PyJWT[crypto]>=2.13,<3",
+    "pydantic-settings>=2.10,<3",
+    "SQLAlchemy[asyncio]>=2.0.52,<2.1",
+    "dusk-security==0.2.0",
+    "uvicorn>=0.35,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "mypy>=1.10",
+    "pytest>=7.4",
+    "pytest-cov>=4.1",
+    "ruff>=0.4.4",
+]
+
+[project.scripts]
+dusk-control-plane = "dusk_control_plane.main:run"
+dusk-control-plane-migrate = "dusk_control_plane.migration:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+dusk_control_plane = ["migrations/*.mako", "migrations/versions/*.py"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-markers"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "N", "S", "B", "C90", "UP", "ANN"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S", "ANN"]
+"scripts/vulture_whitelist.py" = ["B018", "F821"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_any_generics = true
+
+[tool.bandit]
+exclude_dirs = ["tests"]

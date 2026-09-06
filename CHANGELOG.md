@@ -6,7 +6,119 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-No unreleased changes.
+### Security
+
+- Replaced long-lived AWS access-key secrets in the protected real-agent
+  workflow with job-scoped GitHub OIDC role assumption. Bedrock validation now
+  requires an approved environment, explicit role, region and model variables,
+  and the DUSK gate secret.
+
+### Added
+- Cloud-neutral control-plane delivery assets: a locked multi-stage OCI build,
+  keyless signing with SBOM and provenance, fail-closed image admission, a
+  hardened Helm chart, external secret references, restricted networking,
+  autoscaling, serialized bounded migrations, same-digest promotion evidence,
+  and backward-compatible rollback guidance. Live cloud accounts remain
+  deferred to #251 until backend/frontend localhost validation is complete.
+- Production resilience qualification for the control plane, including
+  concurrent idempotent evaluation serialization, real PostgreSQL connection-loss
+  recovery, mixed-version migration rollback and retry, database-trusted broker
+  acknowledgement time, and documented RTO/RPO recovery procedures.
+- Production-ready AWS, Azure, and Kubernetes policy-evidence boundaries:
+  `DUSK-CLOUD-001` through `DUSK-CLOUD-010`, strict native event
+  normalization, tenant-bound Ed25519 evidence, durable PostgreSQL replay
+  claims, allow-only enforcement-broker routing, and fail-closed release
+  certification. Live provider qualification is deliberately deferred to
+  issue #251 after backend/frontend localhost validation.
+- Bounded, dry-run-first tenant retention enforcement with legal-hold locking,
+  signed deletion evidence, preserved audit continuity, controlled compliance
+  export, and defence-in-depth secret-value redaction.
+- Default-off OpenTelemetry tracing and RED metrics with bounded OTLP export,
+  allow-listed structured JSON logs, request/decision/audit/outbox correlation,
+  and measured normalization, behavioral, policy, persistence, audit, response,
+  delivery, and broker-acknowledgement stages.
+- Tenant-scoped dashboard summary, decision-volume, action-breakdown, and
+  agent-risk investigation APIs backed only by persisted PostgreSQL decisions,
+  with UTC comparison windows, measured p95 latency, explicit freshness and
+  empty states, signed stable-ranking cursors, and default-disabled activation.
+- Tenant-scoped decision list and investigation endpoints with signed keyset
+  cursors, PostgreSQL full-text search, redacted projections, policy and audit
+  continuity, and default-disabled activation.
+- Bounded transactional-outbox workers with leased PostgreSQL claims,
+  at-least-once delivery IDs, exponential backoff with jitter, dead letters,
+  DNS-rebinding-resistant pinned HTTPS delivery, safe diagnostics, and
+  cryptographically bound enforcement acknowledgements. Only a verified broker
+  outcome can establish `EXECUTED`; webhook delivery and Gate `ALLOW` cannot.
+- Atomic v2 decision evidence persistence: redacted canonical action, decision,
+  safe policy matches, tenant-scoped signed digest-chain event, and outbox intent
+  now commit in one PostgreSQL transaction. Managed signer or database failure
+  fails closed; trusted checkpoints detect mutation, deletion, reordering, and
+  cross-tenant splicing. Additive migration and real PostgreSQL tests cover
+  rollback, idempotent replay, concurrency, restart recovery, and redaction.
+- Trusted policy integration for v2 evaluations, including verifier-confirmed
+  provenance, freshness and digest checks, live-evidence activation guards,
+  deterministic policy/behavioral precedence, safe matched-rule metadata, and
+  measured pipeline timings. The authenticated route fails closed until a
+  complete evaluation service is activated.
+- Framework-neutral canonical evaluation orchestration with explicit identity,
+  clock, trace, semantic-enrichment, behavioral-analysis, policy, offense-memory,
+  persistence, and delivery ports. The frozen `/v1/gate` now uses legacy
+  adapters, while isolated shadow evaluation performs no stateful or external
+  effects.
+- PostgreSQL persistence boundary for the production control plane, including
+  tenant-qualified SQLAlchemy models and repositories, an Alembic baseline,
+  bounded async connection management, critical readiness probing, a
+  digest-pinned local database profile, and real PostgreSQL migration,
+  isolation, idempotency, retention, and rollback tests.
+- CloudFormation template for GitHub OIDC provider and least-privilege IAM role
+  restricted to the `real-agent` environment, with only the model metadata and
+  invocation permissions used by the workflow (`infra/aws/bedrock-real-agent/template.yaml`).
+- PowerShell setup script (`scripts/setup-bedrock-oidc.ps1`) with read-only
+  validation and deployment modes.
+- Read-only validation wrapper (`scripts/test-bedrock-oidc-config.ps1`).
+- Infrastructure and workflow tests (`tests/ci/test_real_agent_infra.py`).
+- Operator documentation for Bedrock OIDC setup (`docs/bedrock-oidc-setup.md`).
+
+- GPT OSS 120B (`openai.gpt-oss-120b`) support for the Bedrock Mantle agent
+  harness, including a model-specific action-serialization contract, bounded
+  corrective retry, and a fixed protected qualification workflow. The model
+  remains outside the required dev matrix until two protected runs pass.
+- Qwen3 32B (`qwen.qwen3-32b`) added to the required Bedrock Mantle dev
+  validation matrix after two credentialed runs reported 26 passed, 0 failed,
+  0 errors, and 0 skipped. A later protected matrix run exposed unrelated
+  tool-routing variance, which is addressed by the scenario isolation below.
+- Explicit model allowlist (`_MANTLE_V1_MODEL_IDS`) in `bedrock_client.py`
+  prevents untrusted model IDs from routing silently to an unintended endpoint.
+  `build_mantle_client` raises `ValueError` for any ID not in the allowlist.
+- Bounded Mantle client configuration: `timeout=120` prevents unbounded
+  inference hangs; `max_retries=0` prevents hidden SDK retry amplification;
+  `max_completion_tokens=4096` prevents unbounded chain-of-thought output.
+- Length-truncation retry in `MantleClient.chat_completions_create`: one
+  additional call when `finish_reason='length'` with no tool call produced.
+  Does not retry wrong-tool calls; an unexpected tool still fails the scenario.
+
+### Removed
+- NVIDIA Nemotron Super 3 120B (`nvidia.nemotron-super-3-120b`) removed from
+  the required dev matrix. The model did not satisfy the deterministic tool-call
+  contract: approximately 20 percent of calls produced wrong-tool reasoning on
+  injection scenarios. The failure was not truncation and could not be resolved
+  by retry logic. A model at that failure rate provides noise rather than
+  security evidence.
+
+### Changed
+- Promoted the real-agent sandbox from the example tree to the production
+  `dusk-agent-harness` root. Runtime, Docker, protected Bedrock workflows,
+  evidence paths, model profiles, documentation, and repository policy now use
+  the production path, with unknown model IDs failing closed.
+- `real-agent-sandbox.yml`: added concurrency group, AWS caller identity
+  verification step, and Bedrock model availability pre-check.
+- `real-agent-sandbox-dev.yml`: required matrix updated to Kimi K2.5, GLM-5,
+  and Qwen3 32B. Model qualification uses authenticated inference rather than
+  the broader Mantle model-list permission. Each model produces separate JUnit
+  evidence. The aggregate gate fails if any model job fails.
+- Protected gate scenarios now expose only the action under test and constrain
+  its target. This prevents unrelated model tool routing from obscuring whether
+  DUSK enforced the required action while preserving real model inference.
 
 ## [0.2.0], 2026-08-05
 

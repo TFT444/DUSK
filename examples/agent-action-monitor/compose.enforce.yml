@@ -1,6 +1,0 @@
-# Enforce-mode override for the local OWASP application demo.
-# Use only with compose.yml so all localhost and container restrictions remain.
-services:
-  dusk-gate:
-    environment:
-      DUSK_ENFORCE: "true"

@@ -8,6 +8,7 @@
 # Repo governance and anything unmatched
 *                               @TFT444
 /.github/                      @TFT444 @ritiksah141
+/ci/                          @TFT444 @ritiksah141
 /LICENSE                       @TFT444 @ritiksah141
 /LICENSE-docs.md               @TFT444 @ritiksah141
 /CODE_OF_CONDUCT.md            @TFT444 @ritiksah141
@@ -16,6 +17,11 @@
 /scripts/                      @TFT444 @ritiksah141
 /docs/branch-protection.md     @TFT444 @ritiksah141
 /docs/threat-model.md          @TFT444 @ritiksah141
+/docs/adr/                     @TFT444 @ritiksah141
+/docs/control-plane-api-conventions.md @TFT444 @ritiksah141
+/docs/control-plane-identity-authorization.md @TFT444 @ritiksah141
+/docs/production-control-plane-threat-model.md @TFT444 @ritiksah141
+/services/control-plane/          @TFT444 @ritiksah141
 
 # Ritik's lane -- gate service, SIE, trace, packaging
 /src/dusk/core/                 @TFT444 @ritiksah141
@@ -24,7 +30,7 @@
 /src/dusk/actions/verdict.py    @TFT444 @ritiksah141
 /src/dusk/trace/                @TFT444 @ritiksah141
 /src/dusk/config.py             @TFT444 @ritiksah141
-/examples/agent-action-monitor/src/dusk/api.py  @TFT444 @ritiksah141
-/examples/agent-action-monitor/compose.yml      @TFT444 @ritiksah141
-/examples/agent-action-monitor/Dockerfile       @TFT444 @ritiksah141
-/examples/agent-action-monitor/contracts/       @TFT444 @ritiksah141
+/dusk-agent-harness/src/dusk/api.py  @TFT444 @ritiksah141
+/dusk-agent-harness/compose.yml      @TFT444 @ritiksah141
+/dusk-agent-harness/Dockerfile       @TFT444 @ritiksah141
+/dusk-agent-harness/contracts/       @TFT444 @ritiksah141

@@ -1,0 +1,121 @@
+{
+  "contract": "/v1/gate and /health legacy behavior",
+  "version": 1,
+  "normalization": {
+    "json": "Canonical UTF-8 JSON with sorted object keys and no insignificant whitespace.",
+    "trace_ids": "UUID generation uses the fixed hexadecimal values recorded here.",
+    "clock": "Repeat-offense creation and scoring use 2024-01-15T12:00:00Z.",
+    "headers": "Content-Type and WWW-Authenticate are frozen; transport headers are excluded."
+  },
+  "responses": {
+    "allow": {
+      "status": 200,
+      "headers": {"Content-Type": "application/json"},
+      "body": {
+        "blast": "medium",
+        "mitre_atlas": ["AML.T0051 LLM Prompt Injection"],
+        "mitre_attack": ["T1562.004 Impair Defenses: Disable or Modify System Firewall"],
+        "predicted_next": "expect lateral movement into the newly reachable segment; watch for east-west connections from this agent",
+        "reasons": ["action matches the agent's established pattern"],
+        "score": 0.0,
+        "similar_decision_ids": [],
+        "trace_id": "00000000000000000000000000000001",
+        "verdict": "ALLOW"
+      }
+    },
+    "watch_refusal": {
+      "status": 200,
+      "headers": {"Content-Type": "application/json"},
+      "body": {
+        "blast": "high",
+        "mitre_atlas": ["AML.T0051 LLM Prompt Injection"],
+        "mitre_attack": ["T1562.004 Impair Defenses: Disable or Modify System Firewall"],
+        "predicted_next": "expect lateral movement into the newly reachable segment; watch for east-west connections from this agent",
+        "reasons": ["agent 'ghost-agent' has no established baseline; its behaviour cannot be vouched for", "action touches sensitive terms ['restricted']"],
+        "score": 0.85,
+        "similar_decision_ids": [],
+        "trace_id": "00000000000000000000000000000001",
+        "verdict": "WOULD-BLOCK"
+      }
+    },
+    "enforce_refusal": {
+      "status": 200,
+      "headers": {"Content-Type": "application/json"},
+      "body": {
+        "blast": "high",
+        "mitre_atlas": ["AML.T0051 LLM Prompt Injection"],
+        "mitre_attack": ["T1562.004 Impair Defenses: Disable or Modify System Firewall"],
+        "predicted_next": "expect lateral movement into the newly reachable segment; watch for east-west connections from this agent",
+        "reasons": ["agent 'ghost-agent' has no established baseline; its behaviour cannot be vouched for", "action touches sensitive terms ['restricted']"],
+        "score": 0.85,
+        "similar_decision_ids": [],
+        "trace_id": "00000000000000000000000000000001",
+        "verdict": "BLOCK"
+      }
+    },
+    "missing_timestamp": {"status": 400, "headers": {"Content-Type": "application/json"}, "body": {"error": "Invalid or missing timestamp: 'timestamp'"}},
+    "invalid_json": {"status": 400, "headers": {"Content-Type": "application/json"}, "body": {"error": "request body must be a JSON object"}},
+    "non_object_json": {"status": 400, "headers": {"Content-Type": "application/json"}, "body": {"error": "request body must be a JSON object"}},
+    "empty_agent_id": {"status": 400, "headers": {"Content-Type": "application/json"}, "body": {"error": "agent_id must be a non-empty string"}},
+    "empty_target": {"status": 400, "headers": {"Content-Type": "application/json"}, "body": {"error": "target must be a non-empty string"}},
+    "naive_timestamp": {"status": 400, "headers": {"Content-Type": "application/json"}, "body": {"error": "timestamp must be timezone-aware"}},
+    "unknown_action_type": {"status": 400, "headers": {"Content-Type": "application/json"}, "body": {"error": "action_type 'delete_everything' is not one of the known types: firewall_rule_change, port_change, role_assignment, route_change, segment_change, unknown"}},
+    "change_not_object": {"status": 400, "headers": {"Content-Type": "application/json"}, "body": {"error": "change must be a dict with 'before' and 'after' keys"}},
+    "missing_source": {"status": 400, "headers": {"Content-Type": "application/json"}, "body": {"error": "Missing required field: 'source'"}},
+    "anonymous_denied": {"status": 401, "headers": {"Content-Type": "application/json", "WWW-Authenticate": "Bearer"}, "body": {"error": "authentication required"}},
+    "wrong_bearer_scheme": {"status": 401, "headers": {"Content-Type": "application/json", "WWW-Authenticate": "Bearer"}, "body": {"error": "authentication required"}},
+    "wrong_bearer_token": {"status": 401, "headers": {"Content-Type": "application/json", "WWW-Authenticate": "Bearer"}, "body": {"error": "authentication required"}},
+    "oversized_body": {"status": 413, "headers": {"Content-Type": "text/html; charset=utf-8"}, "body_text": "<!doctype html>\n<html lang=en>\n<title>413 Request Entity Too Large</title>\n<h1>Request Entity Too Large</h1>\n<p>The data value transmitted exceeds the capacity limit.</p>\n"},
+    "method_not_allowed": {"status": 405, "headers": {"Content-Type": "text/html; charset=utf-8"}, "body_text": "<!doctype html>\n<html lang=en>\n<title>405 Method Not Allowed</title>\n<h1>Method Not Allowed</h1>\n<p>The method is not allowed for the requested URL.</p>\n"},
+    "health_ok": {"status": 200, "headers": {"Content-Type": "application/json"}, "body": {"status": "ok"}},
+    "health_without_baseline": {"status": 200, "headers": {"Content-Type": "application/json"}, "body": {"status": "ok"}},
+    "health_baseline_degraded": {"status": 503, "headers": {"Content-Type": "application/json"}, "body": {"baseline_error": "BASELINE_LOAD_FAILED", "status": "degraded"}},
+    "health_offense_memory_degraded": {"status": 503, "headers": {"Content-Type": "application/json"}, "body": {"offense_memory_error": "OFFENSE_MEMORY_PERSIST_FAILED", "status": "degraded"}},
+    "similar_decision_third_response": {
+      "status": 200,
+      "headers": {"Content-Type": "application/json"},
+      "body": {
+        "blast": "medium",
+        "mitre_atlas": ["AML.T0051 LLM Prompt Injection"],
+        "mitre_attack": ["T1562.004 Impair Defenses: Disable or Modify System Firewall"],
+        "predicted_next": "expect lateral movement into the newly reachable segment; watch for east-west connections from this agent",
+        "reasons": ["action matches the agent's established pattern"],
+        "score": 0.0,
+        "similar_decision_ids": ["00000000000000000000000000000001", "00000000000000000000000000000002"],
+        "trace_id": "00000000000000000000000000000003",
+        "verdict": "ALLOW"
+      }
+    },
+    "repeat_refusal_after_restart": {
+      "status": 200,
+      "headers": {"Content-Type": "application/json"},
+      "body": {
+        "blast": "high",
+        "mitre_atlas": ["AML.T0051 LLM Prompt Injection"],
+        "mitre_attack": ["T1562.004 Impair Defenses: Disable or Modify System Firewall"],
+        "predicted_next": "expect lateral movement into the newly reachable segment; watch for east-west connections from this agent",
+        "reasons": [
+          "agent 'ghost-agent' has no established baseline; its behaviour cannot be vouched for",
+          "action touches sensitive terms ['restricted']",
+          "resembles a prior WOULD-BLOCK action by this agent (trace 00000000000000000000000000000001, 2024-01-15)"
+        ],
+        "score": 1.0,
+        "similar_decision_ids": [],
+        "trace_id": "00000000000000000000000000000002",
+        "verdict": "WOULD-BLOCK"
+      }
+    }
+  },
+  "side_effects": {
+    "allow": {"webhooks": ["decision", "report"], "offense_records": 0, "decision_records": 1},
+    "watch_refusal": {"webhooks": ["alert", "decision", "report"], "offense_records": 1, "decision_records": 1},
+    "enforce_refusal": {"webhooks": ["alert", "decision", "report"], "offense_records": 1, "decision_records": 1},
+    "invalid_request": {"webhooks": [], "offense_records": 0, "decision_records": 0},
+    "unauthorized_request": {"webhooks": [], "offense_records": 0, "decision_records": 0}
+  },
+  "downstream_execution": {
+    "ALLOW": ["gate", "downstream"],
+    "WOULD-BLOCK": ["gate", "downstream"],
+    "BLOCK": ["gate"]
+  }
+}

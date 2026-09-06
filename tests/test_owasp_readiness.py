@@ -33,9 +33,9 @@ def test_missing_manifest_evidence_path_is_reported(tmp_path: Path) -> None:
     workflow = tmp_path / ".github/workflows/dusk.yml"
     workflow.parent.mkdir(parents=True)
     workflow.write_text("\n".join(REQUIRED_COMMANDS), encoding="utf-8")
-    demo = tmp_path / "examples/agent-action-monitor/scripts/run_owasp_demo.sh"
-    demo.parent.mkdir(parents=True)
-    demo.write_text("\n".join(REQUIRED_MARKERS), encoding="utf-8")
+    harness = tmp_path / "dusk-agent-harness/scripts/run_owasp_demo.sh"
+    harness.parent.mkdir(parents=True)
+    harness.write_text("\n".join(REQUIRED_MARKERS), encoding="utf-8")
 
     assert "missing evidence path: not-present.md" in validate(tmp_path)
 
@@ -46,8 +46,8 @@ REQUIRED_COMMANDS = (
 )
 REQUIRED_MARKERS = (
     'if [ "${1:-}" = "--no-build" ]',
-    "$COMPOSE build dusk-gate mock-prod agent-demo",
+    "$COMPOSE build dusk-gate mock-prod runtime",
     "up --detach --no-build --wait",
-    "run --rm --pull never agent-demo",
+    "run --rm --pull never runtime",
     "trap cleanup EXIT",
 )

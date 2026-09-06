@@ -35,7 +35,7 @@ required private leader details in the application.
 | Public contribution process and DCO | Complete | [Contribution guide](../CONTRIBUTING.md) and CI DCO check |
 | Code of Conduct | Complete | [Code of Conduct](../CODE_OF_CONDUCT.md) |
 | Security reporting and threat boundaries | Complete | [Security policy](../SECURITY.md), [threat model](threat-model.md), and [self-assessment](security-self-assessment.md) |
-| Reproducible reviewer demo | Complete | [Demo instructions](../README.md#owasp-reviewer-demo) and CI watch and enforce jobs |
+| Reproducible reviewer validation | Complete | [Validation instructions](../README.md#owasp-reviewer-validation) and CI watch and enforce jobs |
 | Version and package build | Complete | `v0.2.0` version consistency passed; wheel and source archive built and passed Twine metadata validation on 21 August 2026 |
 | Stable release with SBOM, checksums, and provenance | Complete | [v0.2.0](https://github.com/ShieldTech-Ltd/DUSK/releases/tag/v0.2.0) uses a verified signed tag on `abb983e`; release workflow, checksums, and provenance verification passed |
 | Public demo recording from the release tag | Complete | [90-second v0.2.0 reviewer recording](https://github.com/ShieldTech-Ltd/DUSK/releases/download/v0.2.0/dusk-owasp-demo-v0.2.0.mp4) |

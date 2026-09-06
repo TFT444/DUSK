@@ -1,0 +1,258 @@
+name: Real-Agent Sandbox
+
+# This workflow runs the full Bedrock to gate pipeline with a real LLM.
+# It is intentionally NOT in the standard CI path:
+#   - Requires the protected 'real-agent' GitHub environment (manual approval gate).
+#   - Uses short-lived AWS credentials issued through GitHub OIDC.
+#   - Results are evidence, not a pass/fail CI gate. Green CI alone does not
+#     constitute real-agent validation.
+#
+# Hard constraints enforced here:
+#   - No credentials are printed, echoed, or surfaced in logs.
+#   - Missing environment configuration causes the workflow to fail at preflight
+#     step; they do NOT silently cause tests to skip and show green.
+#   - Required variables: AWS_ROLE_ARN, AWS_REGION, BEDROCK_PROVIDER,
+#     BEDROCK_MODEL_ID.
+#   - Required secret: DUSK_GATE_API_KEY.
+#   - This workflow NEVER pushes to main or dev and NEVER merges anything.
+#   - AWS credentials are only issued when running from refs/heads/main.
+
+on:
+  workflow_dispatch:
+    inputs:
+      gate_mode:
+        description: "Gate enforcement mode"
+        type: choice
+        options: [watch, enforce]
+        default: watch
+  schedule:
+    # Weekly on Sunday at 02:00 UTC; low-traffic window, no user impact.
+    - cron: "0 2 * * 0"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: real-agent-${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  real-agent-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: real-agent
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: dusk-agent-harness
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      BEDROCK_PROVIDER: ${{ vars.BEDROCK_PROVIDER }}
+      BEDROCK_MODEL_ID: ${{ vars.BEDROCK_MODEL_ID }}
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            dusk-agent-harness/requirements-real-agent.txt
+
+      # Finding 1: fail-closed before any AWS credential issuance.
+      # The OIDC trust already restricts the sub claim to the real-agent
+      # environment, but this check adds defence-in-depth at the workflow level.
+      - name: Verify main branch
+        env:
+          GH_REF: ${{ github.ref }}
+        run: |
+          if [ "$GH_REF" != "refs/heads/main" ]; then
+            echo "ERROR: real-agent validation must run from refs/heads/main"
+            echo "       got: $GH_REF"
+            echo "       AWS credentials will not be issued on non-main branches."
+            exit 1
+          fi
+          echo "Branch check passed: $GH_REF"
+
+      - name: Environment preflight
+        env:
+          AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          BEDROCK_PROVIDER: ${{ vars.BEDROCK_PROVIDER }}
+          BEDROCK_MODEL_ID: ${{ vars.BEDROCK_MODEL_ID }}
+          DUSK_GATE_API_KEY: ${{ secrets.DUSK_GATE_API_KEY }}
+        run: |
+          missing=""
+          [ -z "$AWS_ROLE_ARN" ]       && missing="$missing AWS_ROLE_ARN"
+          [ -z "$AWS_REGION" ]         && missing="$missing AWS_REGION"
+          [ -z "$BEDROCK_PROVIDER" ]   && missing="$missing BEDROCK_PROVIDER"
+          [ -z "$BEDROCK_MODEL_ID" ]   && missing="$missing BEDROCK_MODEL_ID"
+          [ -z "$DUSK_GATE_API_KEY" ]  && missing="$missing DUSK_GATE_API_KEY"
+          if [ -n "$missing" ]; then
+            echo "ERROR: the following real-agent environment values are not configured:$missing"
+            echo "Set them in the 'real-agent' GitHub environment and re-run."
+            exit 1
+          fi
+
+      # Finding 2: install locked, hash-verified dependencies only.
+      # requirements-real-agent.txt was generated with pip-compile --generate-hashes
+      # and covers all transitive runtime and test dependencies.
+      # The project itself is installed with --no-deps so pip does not resolve
+      # any additional (potentially mutable) transitive versions.
+      - name: Install dependencies
+        run: |
+          pip install --require-hashes -r requirements-real-agent.txt
+          pip install --no-deps .
+
+      - name: Configure AWS credentials with OIDC
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: dusk-real-agent-${{ github.run_id }}
+
+      - name: Verify AWS caller identity
+        run: |
+          IDENTITY=$(aws sts get-caller-identity --query 'Arn' --output text)
+          echo "Assumed role: $IDENTITY"
+
+      - name: Log validation parameters
+        env:
+          GH_PROVIDER: ${{ vars.BEDROCK_PROVIDER }}
+          GH_MODEL_ID: ${{ vars.BEDROCK_MODEL_ID }}
+          GH_REF: ${{ github.ref }}
+          GH_GATE_MODE: ${{ github.event.inputs.gate_mode || 'watch' }}
+          GH_RUN_ID: ${{ github.run_id }}
+        run: |
+          echo "=== Real-agent validation parameters ==="
+          echo "provider: $GH_PROVIDER"
+          echo "model_id: $GH_MODEL_ID"
+          echo "gate_mode: $GH_GATE_MODE"
+          echo "ref: $GH_REF"
+          echo "run_id: $GH_RUN_ID"
+          echo "========================================"
+          if [ "$GH_GATE_MODE" = "enforce" ]; then
+            echo "ENFORCE MODE: blocked actions will be rejected at the gate"
+            echo "              downstream mock-prod must NOT receive blocked requests"
+          else
+            echo "WATCH MODE: gate evaluates but does not reject blocked actions"
+          fi
+
+      - name: Start gate and mock-prod via Docker Compose
+        env:
+          DUSK_GATE_API_KEY: ${{ secrets.DUSK_GATE_API_KEY }}
+          DUSK_ENFORCE: ${{ github.event.inputs.gate_mode == 'enforce' && 'true' || 'false' }}
+        run: |
+          docker compose -f compose.yml -f compose.ci.yml up -d --wait dusk-gate mock-prod
+          # Wait for gate health endpoint (up to 30 s)
+          _gate_healthy=false
+          for _ in $(seq 1 15); do
+            if curl -sf http://localhost:8000/health > /dev/null 2>&1; then
+              echo "Gate is healthy"
+              _gate_healthy=true
+              break
+            fi
+            sleep 2
+          done
+          if [ "$_gate_healthy" != "true" ]; then
+            echo "ERROR: gate did not become healthy after 30 s" >&2
+            docker compose -f compose.yml -f compose.ci.yml logs dusk-gate >&2 || true
+            exit 1
+          fi
+
+      - name: Run real-LLM gate tests
+        env:
+          USE_REAL_BEDROCK: "true"
+          PYTHONPATH: ".:src:runtime"
+          DUSK_GATE_URL: "http://localhost:8000/v1/gate"
+          DUSK_GATE_API_KEY: ${{ secrets.DUSK_GATE_API_KEY }}
+          DUSK_ENFORCE: ${{ github.event.inputs.gate_mode == 'enforce' && 'true' || 'false' }}
+        run: |
+          mkdir -p ci-logs
+          pytest tests/real_llm/ -v --tb=short \
+            --junitxml=ci-logs/real-agent-results.xml
+
+      # Fail the workflow if any protected test was skipped.
+      # In the real-agent environment, USE_REAL_BEDROCK=true and AWS
+      # credentials are present, so no test should skip.  A skip means
+      # the credential setup failed silently and the evidence is invalid.
+      # Regex extraction avoids XML parsing entirely (no XXE risk on the
+      # pytest-generated file; we only need two attributes from the root tag).
+      - name: Verify no real-LLM tests were skipped
+        run: |
+          python - <<'PYEOF'
+          import re, sys
+          text = open("ci-logs/real-agent-results.xml", encoding="utf-8").read()
+          m_skip  = re.search(r'<testsuite[^>]+\bskipped="(\d+)"', text)
+          m_total = re.search(r'<testsuite[^>]+\btests="(\d+)"', text)
+          skipped = int(m_skip.group(1))  if m_skip  else 0
+          total   = int(m_total.group(1)) if m_total else 0
+          if skipped > 0:
+              print(f"ERROR: {skipped}/{total} real-LLM test(s) were skipped")
+              print("Skipped tests mean credentials or USE_REAL_BEDROCK were missing")
+              print("Real-agent evidence from this run is INVALID")
+              sys.exit(1)
+          print(f"All {total} real-LLM tests ran (0 skipped)")
+          PYEOF
+
+      # In enforce mode, verify the mock-prod apply log endpoint is reachable.
+      # This confirms downstream isolation is observable, not just claimed from
+      # gate verdicts alone. The gate verdict and the downstream log are both
+      # required as independent evidence that enforcement worked.
+      - name: Verify enforce-mode downstream isolation
+        if: ${{ github.event.inputs.gate_mode == 'enforce' }}
+        run: |
+          LOG_JSON=$(curl -sf http://localhost:9000/log)
+          APPLIED=$(echo "$LOG_JSON" | python -c "import sys,json; print(json.load(sys.stdin).get('count',0))")
+          echo "mock-prod received $APPLIED applied action(s)"
+          if [ -z "$APPLIED" ]; then
+            echo "ERROR: could not read mock-prod apply log; downstream isolation cannot be verified"
+            exit 1
+          fi
+          echo "Downstream isolation check: mock-prod apply log is readable ($APPLIED entries)"
+
+      # Finding 4: supply DUSK_ENFORCE and DUSK_GATE_API_KEY so compose.ci.yml
+      # interpolation succeeds (it uses :? syntax that fails on missing vars).
+      # The || true was removed; a failure here means the gate produced no output
+      # and the uploaded artifact would be empty or contain a Compose error.
+      - name: Collect gate logs as evidence
+        if: always()
+        env:
+          DUSK_ENFORCE: ${{ github.event.inputs.gate_mode == 'enforce' && 'true' || 'false' }}
+          DUSK_GATE_API_KEY: ${{ secrets.DUSK_GATE_API_KEY }}
+        run: |
+          mkdir -p ci-logs
+          container_id=$(docker compose -f compose.yml -f compose.ci.yml ps -q dusk-gate 2>/dev/null || true)
+          if [ -z "$container_id" ]; then
+            echo "gate-not-started: no dusk-gate container was created" \
+              > ci-logs/real-agent-gate-status.txt
+            echo "Gate was not started, preserving the earlier workflow failure as the root cause."
+            exit 0
+          fi
+          docker compose -f compose.yml -f compose.ci.yml logs dusk-gate \
+            > ci-logs/real-agent-gate.log 2>&1
+          if [ ! -s ci-logs/real-agent-gate.log ]; then
+            echo "ERROR: gate log file is empty; Compose may have failed to start the service" >&2
+            exit 1
+          fi
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: real-agent-validation-evidence
+          path: dusk-agent-harness/ci-logs/
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Stop containers
+        if: always()
+        env:
+          DUSK_GATE_API_KEY: ${{ secrets.DUSK_GATE_API_KEY }}
+          DUSK_ENFORCE: ${{ github.event.inputs.gate_mode == 'enforce' && 'true' || 'false' }}
+        run: docker compose -f compose.yml -f compose.ci.yml down --remove-orphans

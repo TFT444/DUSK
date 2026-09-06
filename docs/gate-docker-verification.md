@@ -1,7 +1,7 @@
 # Gate Docker Verification
 
-This document records the current verification boundary for the
-`examples/agent-action-monitor` stack.
+This document records the current verification boundary for the DUSK
+Production Agent Harness in `dusk-agent-harness`.
 
 ## Stack
 
@@ -9,7 +9,7 @@ The default Compose project contains:
 
 - `dusk-gate`, the Gunicorn-hosted HTTP gate
 - `mock-prod`, the dummy action target and bounded webhook metadata sink
-- `agent-demo`, the Bedrock-or-mock scenario driver
+- `runtime`, the Bedrock-or-mock scenario driver used for real LLM validation
 
 An n8n workflow import asset remains under `n8n/`, but no n8n runtime is bundled.
 Operators can import it into a separately maintained and scanned deployment.
@@ -29,12 +29,12 @@ Operators can import it into a separately maintained and scanned deployment.
 ## Verification commands
 
 ```bash
-docker compose -f examples/agent-action-monitor/compose.yml config -q
-docker compose -f examples/agent-action-monitor/compose.yml build
+docker compose --project-name agent-action-monitor -f dusk-agent-harness/compose.yml config -q
+docker compose --project-name agent-action-monitor -f dusk-agent-harness/compose.yml build
 trivy image --scanners vuln,secret --severity HIGH,CRITICAL \
   --ignore-unfixed --exit-code 1 agent-action-monitor-dusk-gate
 trivy image --scanners vuln,secret --severity HIGH,CRITICAL \
-  --ignore-unfixed --exit-code 1 agent-action-monitor-agent-demo
+  --ignore-unfixed --exit-code 1 agent-action-monitor-runtime
 trivy image --scanners vuln,secret --severity HIGH,CRITICAL \
   --ignore-unfixed --exit-code 1 agent-action-monitor-mock-prod
 ```

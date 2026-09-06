@@ -14,11 +14,11 @@ REQUIRED_WORKFLOW_COMMANDS = (
     "run_owasp_demo.sh --no-build watch",
     "run_owasp_demo.sh --no-build enforce",
 )
-REQUIRED_DEMO_MARKERS = (
+REQUIRED_HARNESS_MARKERS = (
     'if [ "${1:-}" = "--no-build" ]',
-    "$COMPOSE build dusk-gate mock-prod agent-demo",
+    "$COMPOSE build dusk-gate mock-prod runtime",
     "up --detach --no-build --wait",
-    "run --rm --pull never agent-demo",
+    "run --rm --pull never runtime",
     "trap cleanup EXIT",
 )
 
@@ -64,16 +64,20 @@ def validate(root: Path) -> list[str]:
     workflow = (root / ".github/workflows/dusk.yml").read_text(encoding="utf-8")
     failures.extend(
         _missing_markers(
-            workflow, REQUIRED_WORKFLOW_COMMANDS, "CI does not run the scanned demo image"
+            workflow,
+            REQUIRED_WORKFLOW_COMMANDS,
+            "CI does not run the scanned production harness image",
         )
     )
 
-    demo_script = (root / "examples/agent-action-monitor/scripts/run_owasp_demo.sh").read_text(
+    harness_script = (root / "dusk-agent-harness/scripts/run_owasp_demo.sh").read_text(
         encoding="utf-8"
     )
     failures.extend(
         _missing_markers(
-            demo_script, REQUIRED_DEMO_MARKERS, "OWASP demo is missing required behavior"
+            harness_script,
+            REQUIRED_HARNESS_MARKERS,
+            "OWASP harness validation is missing required behavior",
         )
     )
 

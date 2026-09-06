@@ -1,0 +1,29 @@
+# Direct dependencies for the real-agent sandbox workflow.
+# Compile with: pip-compile --generate-hashes requirements-real-agent.in
+#
+# Scope: only what the real-agent workflow needs to RUN tests.
+# Excluded: ruff, mypy, bandit (lint/type tools only used in standard CI).
+# The dusk-agent-action-monitor package itself is installed separately
+# with --no-deps so these transitive deps are the sole resolution source.
+
+# Runtime deps of dusk-agent-action-monitor
+PyYAML>=6.0
+flask>=3.0
+flask-cors>=4.0
+gunicorn>=22.0
+python-dotenv>=1.0
+
+# Test harness
+pytest>=7.4.0
+pytest-cov>=4.1.0
+pytest-env>=1.1.0
+requests>=2.31
+types-PyYAML>=6.0
+
+# AWS Bedrock (runtime/requirements.txt, only needed when USE_REAL_BEDROCK=true)
+boto3>=1.34
+
+# Bedrock Mantle provider (Kimi K2.5) - OpenAI-compatible client + token minting.
+# Only exercised when BEDROCK_PROVIDER=mantle.
+openai>=1.35.0
+aws-bedrock-token-generator>=0.1.0

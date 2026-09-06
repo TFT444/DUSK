@@ -1,0 +1,13 @@
+version: 1
+suppressions:
+  - control: CTR-010
+    finding: CVE-2025-6297
+    reason: Debian bookworm classifies the dpkg issue as won't-fix; no fixed package exists.
+    owner: Security Engineering
+    expires: 2026-09-30
+  - {control: CTR-010, finding: CVE-2026-0915, reason: Debian bookworm has no fixed glibc package, owner: Security Engineering, expires: 2026-09-30}
+  - {control: CTR-010, finding: CVE-2026-0861, reason: Debian bookworm has no fixed glibc package, owner: Security Engineering, expires: 2026-09-30}
+  - {control: CTR-010, finding: CVE-2025-15281, reason: Debian bookworm has no fixed glibc package, owner: Security Engineering, expires: 2026-09-30}
+  - {control: CTR-010, finding: CVE-2025-7458, reason: Debian bookworm has no fixed SQLite package, owner: Security Engineering, expires: 2026-09-30}
+  - {control: CTR-010, finding: CVE-2025-13151, reason: Debian bookworm has no fixed libtasn1 package, owner: Security Engineering, expires: 2026-09-30}
+  - {control: CTR-010, finding: CVE-2023-45853, reason: Debian bookworm has no fixed zlib package, owner: Security Engineering, expires: 2026-09-30}

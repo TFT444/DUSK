@@ -1,0 +1,47 @@
+[
+  {
+    "agent_id": "iam-agent",
+    "timestamp": "2023-11-14T22:13:20+00:00",
+    "action_type": "role_assignment",
+    "target": "ra-netops-viewer",
+    "change": {"before": null, "after": {"role": "viewer"}},
+    "source": "generic",
+    "raw_ref": "evt-role-0001"
+  },
+  {
+    "agent_id": "iam-agent",
+    "timestamp": "2023-11-14T22:14:20+00:00",
+    "action_type": "role_assignment",
+    "target": "ra-segment-viewer",
+    "change": {"before": null, "after": {"role": "viewer"}},
+    "source": "generic",
+    "raw_ref": "evt-role-0002"
+  },
+  {
+    "agent_id": "iam-agent",
+    "timestamp": "2023-11-14T22:15:20+00:00",
+    "action_type": "role_assignment",
+    "target": "ra-netops-editor",
+    "change": {"before": null, "after": {"role": "editor"}},
+    "source": "generic",
+    "raw_ref": "evt-role-0003"
+  },
+  {
+    "agent_id": "iam-agent",
+    "timestamp": "2023-11-14T22:16:20+00:00",
+    "action_type": "role_assignment",
+    "target": "ra-segment-editor",
+    "change": {"before": null, "after": {"role": "editor"}},
+    "source": "generic",
+    "raw_ref": "evt-role-0004"
+  },
+  {
+    "agent_id": "iam-agent",
+    "timestamp": "2023-11-14T22:17:20+00:00",
+    "action_type": "role_assignment",
+    "target": "ra-stale-viewer",
+    "change": {"before": {"role": "viewer"}, "after": null},
+    "source": "generic",
+    "raw_ref": "evt-role-0005"
+  }
+]

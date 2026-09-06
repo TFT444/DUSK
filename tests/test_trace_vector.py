@@ -101,6 +101,18 @@ def test_sie_encode_returns_none_and_does_not_raise_on_sdk_error(monkeypatch) ->
     assert vector.sie_encode("hello world") is None
 
 
+def test_sie_timeout_uses_deterministic_fail_soft_embedding(monkeypatch) -> None:
+    fake_client = MagicMock()
+    fake_client.encode.side_effect = TimeoutError("semantic enrichment timed out")
+    monkeypatch.setattr(vector, "_sie_client", lambda config: fake_client)
+    _inject_fake_item_type(monkeypatch)
+
+    first = vector.embed_text("privileged role assignment")
+    second = vector.embed_text("privileged role assignment")
+
+    assert first == second == vector._ngram_fallback("privileged role assignment")
+
+
 def test_sie_client_returns_none_when_sie_sdk_not_installed(monkeypatch) -> None:
     monkeypatch.setitem(sys.modules, "sie_sdk", None)
     assert vector._sie_client(Config(sie_endpoint="http://sie:8080")) is None

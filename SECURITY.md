@@ -33,8 +33,8 @@ this table will identify the supported released minor version.
 
 ## Deployment Boundary
 
-The HTTP service under `examples/agent-action-monitor` is a local integration
-example. Its default Compose configuration binds published ports to localhost.
+The HTTP service under `dusk-agent-harness` is part of the DUSK Production Agent
+Harness. Its default Compose configuration binds published ports to localhost.
 It is not an internet-ready deployment and must not be exposed directly.
 
 Production deployments must provide authentication, TLS, request rate limits,

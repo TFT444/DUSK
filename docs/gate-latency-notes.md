@@ -4,7 +4,7 @@ A first data point on latency-under-load, captured once a real
 `DUSK_SIE_ENDPOINT` and, for the authenticated hosted deployment,
 `SIE_API_KEY` became available. This measures
 `/v1/gate`'s own added latency with live SIE enabled -- not the full
-`agent-demo` -> gate -> `mock-prod` round trip. Treat this as a preliminary
+`runtime` -> gate -> `mock-prod` round trip. Treat this as a preliminary
 probe, superseded by the full-stack run recorded further down.
 
 ## Setup
@@ -42,14 +42,14 @@ probe, superseded by the full-stack run recorded further down.
 
 ## A first full-stack attempt hit a cluster outage, not a gate bug
 
-With `agent-demo`/`mock-prod` in place, running the real `dusk-gate` +
-`mock-prod` + `agent-demo/harness.py` end to end confirms a clean action is
+With `runtime`/`mock-prod` in place, running the real `dusk-gate` +
+`mock-prod` + `runtime/harness.py` end to end confirms a clean action is
 `ALLOW`ed and applied, and a poisoned action is `WOULD-BLOCK` (watch mode)
 or `BLOCK` (enforce mode) and never reaches `mock-prod` either way -- see
 this doc's companion, `docs/gate-docker-verification.md`, for the exact
 commands.
 
-A first attempt at a real `agent-demo/load_driver.py` run against the
+A first attempt at a real `runtime/load_driver.py` run against the
 hosted tester cluster (after the table above was captured, in the same
 session) hit sustained `503 Service Unavailable` from the extract model
 (`urchade/gliner_multi-v2.1`) at every concurrency level tried, including
@@ -60,7 +60,7 @@ earlier in the same session. This points to a transient problem on
 Superlinked's shared tester cluster at that moment, not a regression in the
 gate or the SDK wiring: `sie_extract`'s own error handling degraded
 correctly (returned `[]` rather than raising), just too slowly for
-`agent-demo/harness.py`'s 10-second client timeout under any load at all.
+`runtime/harness.py`'s 10-second client timeout under any load at all.
 
 No further load was placed on the cluster once this pattern was clear, out
 of courtesy to shared, sponsored compute in a visibly degraded state.
@@ -76,7 +76,7 @@ on this request path) each took 0.1-35s to come back from cold before
 settling into sub-second responses. This is a real characteristic of a
 shared, scale-to-zero tester allocation, not a gate or SDK defect --
 `sie_sdk`'s own transient-error retry handled it transparently in every
-case except when a cold re-provision outlasted `agent-demo/harness.py`'s
+case except when a cold re-provision outlasted `runtime/harness.py`'s
 10-second client timeout.
 
 **Setup:** `dusk-gate` run locally (not in Docker) with `sie-sdk` installed
@@ -84,7 +84,7 @@ temporarily so live SIE calls are actually made (the project's own venv
 does not ship `sie-sdk` by default -- it lives in the `sie` extras group,
 uninstalled again after this run to keep the venv matching CI); baseline
 from `tests/fixtures/actions_normal.json`; `mock-prod` run locally; full
-round trip via `agent-demo/load_driver.py` (`harness.run_scenario` ->
+round trip via `runtime/load_driver.py` (`harness.run_scenario` ->
 `/v1/gate` -> `mock-prod` on `ALLOW`), 20 requests per concurrency level,
 20% poisoned / 80% clean mix, single trial.
 

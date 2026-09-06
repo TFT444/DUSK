@@ -6,6 +6,11 @@ ATLAS for AI-specific attacks. It also records how shipped controls relate to
 the OWASP Top 10 for Agentic Applications 2026 without claiming complete
 coverage or compliance.
 
+The proposed multi-tenant production service has a separate
+[production control-plane threat model](production-control-plane-threat-model.md).
+That document is explicitly prospective and does not change the shipped/planned
+claims below.
+
 ## Threat landscape
 
 Autonomous AI agents operating on network infrastructure represent a new attack

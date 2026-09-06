@@ -25,8 +25,8 @@ does not claim that OWASP has approved, endorsed, or certified DUSK.
 published from a signed tag on the reviewed `main` commit with a wheel, source
 archive, SBOM, checksums, and build provenance.
 
-**Working demo:** The reviewer implementation is available on `main` at
-https://github.com/ShieldTech-Ltd/DUSK/tree/main/examples/agent-action-monitor.
+**Working validation harness:** The reviewer implementation is available on
+`main` at https://github.com/ShieldTech-Ltd/DUSK/tree/main/dusk-agent-harness.
 
 ## Project description
 
@@ -116,7 +116,7 @@ endorsement of a commercial product or service.
 - [Architecture](ARCHITECTURE.md)
 - [Roadmap](../README.md#roadmap)
 - [Superlinked SIE accepted example](https://github.com/superlinked/sie/tree/main/examples/agent-action-monitor)
-- [Reproducible OWASP reviewer demo](../README.md#owasp-reviewer-demo)
+- [Reproducible OWASP reviewer validation](../README.md#owasp-reviewer-validation)
 - [Machine-readable technical evidence](owasp-technical-evidence.json), checked
   on every pull request by `scripts/check_owasp_readiness.py`
 - [Application readiness tracker](owasp-readiness-tracker.md)
@@ -128,7 +128,7 @@ endorsement of a commercial product or service.
 
 Complete these private or external checks immediately before filing:
 
-- [x] The OWASP demo and application package are promoted from `dev` to `main`
+- [x] The OWASP reviewer harness and application package are promoted from `dev` to `main`
 - [x] The signed v0.2.0 release and technical artifacts are published
 - [x] The v0.2.0 demo recording is published and linked
 - [x] The maintainers reviewed the existing pull request system and chose to

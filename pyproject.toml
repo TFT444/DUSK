@@ -26,6 +26,7 @@ dependencies = [
     "click>=8.1.0",
     "rich>=13.0.0",
     "PyYAML>=6.0",
+    "cryptography>=42.0.0",
 ]
 
 [project.optional-dependencies]
@@ -36,6 +37,8 @@ dev = [
     "pytest>=7.4.0",
     "pytest-cov>=4.1.0",
     "pytest-env>=1.1.0",
+    "pytest-xdist>=3.6.0",
+    "hypothesis>=6.100.0",
     "ruff>=0.4.4",
     "mypy>=1.10.0",
     "bandit[toml]>=1.7.8",
@@ -58,10 +61,12 @@ dusk = "dusk.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
+"dusk" = ["py.typed"]
 "dusk.policies" = ["*.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "--strict-markers"
 # Force UTF-8 for the test process so console capture never falls back to a
 # platform default like Windows cp1252, which cannot encode every character the
 # Rich alert panel may emit.
@@ -83,7 +88,7 @@ select = ["E", "W", "F", "I", "N", "S", "B", "C90", "UP", "ANN"]
 "lab/*" = ["S", "ANN"]
 # Bare-name statements are vulture's own documented whitelist syntax, not a
 # real code smell -- see scripts/vulture_whitelist.py's module docstring.
-"scripts/vulture_whitelist.py" = ["B018"]
+"scripts/vulture_whitelist.py" = ["B018", "F401"]
 
 [tool.mypy]
 python_version = "3.11"

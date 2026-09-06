@@ -30,14 +30,14 @@
       "paths": ["src/dusk/policies/enterprise-v1.yaml", "docs/enterprise-policy-pack.md"]
     },
     {
-      "id": "reproducible-watch-and-enforce-demo",
+      "id": "reproducible-watch-and-enforce-validation",
       "status": "implemented-and-ci-gated",
       "paths": [
-        "examples/agent-action-monitor/compose.yml",
-        "examples/agent-action-monitor/compose.ci.yml",
-        "examples/agent-action-monitor/compose.enforce.yml",
-        "examples/agent-action-monitor/contracts/gate.openapi.yaml",
-        "examples/agent-action-monitor/scripts/run_owasp_demo.sh",
+        "dusk-agent-harness/compose.yml",
+        "dusk-agent-harness/compose.ci.yml",
+        "dusk-agent-harness/compose.enforce.yml",
+        "dusk-agent-harness/contracts/gate.openapi.yaml",
+        "dusk-agent-harness/scripts/run_owasp_demo.sh",
         ".github/workflows/dusk.yml"
       ]
     },

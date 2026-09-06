@@ -28,9 +28,9 @@ def _raw_pack() -> dict[str, object]:
 def test_enterprise_catalogue_is_complete_and_unique() -> None:
     pack = load_enterprise_pack()
     assert pack.name == "dusk-enterprise"
-    assert len(pack.rules) == 60
+    assert len(pack.rules) == 87
     assert len({rule.id for rule in pack.rules}) == len(pack.rules)
-    assert sum(rule.status == "enforced" for rule in pack.rules) == 15
+    assert sum(rule.status == "enforced" for rule in pack.rules) == 51
     assert {rule.category for rule in pack.rules} >= {
         "identity",
         "permit",
@@ -45,6 +45,7 @@ def test_enterprise_catalogue_is_complete_and_unique() -> None:
         "mcp",
         "supply-chain",
         "behavior",
+        "tenant",
     }
 
 
@@ -74,7 +75,7 @@ def test_cross_tenant_rule_compares_runtime_fields() -> None:
 
 def test_clean_action_is_allowed() -> None:
     context = {
-        "action": {"type": "filesystem.read"},
+        "action": {"type": "filesystem.read", "consequential": False},
         "resource": {"within_approved_root": True, "classification": "internal"},
     }
     assert load_enterprise_pack().evaluate(context).decision is Decision.ALLOW
@@ -160,7 +161,10 @@ def test_clean_action_is_allowed() -> None:
         ),
         (
             "DUSK-CONSEQ-001",
-            {"action": {"category": "financial"}, "approval": {"valid": False}},
+            {
+                "action": {"category": "financial", "consequential": False},
+                "approval": {"valid": False},
+            },
             Decision.REQUIRE_APPROVAL,
         ),
     ],
@@ -191,9 +195,17 @@ def test_invalid_catalogues_fail_closed(tmp_path: Path, mutation: object, messag
 
 
 def test_decision_evidence_contains_versions_and_no_context() -> None:
+    # Use a valid domain ("identity") so strict context validation passes.
+    # The unique sentinel value verifies that context field values are never
+    # echoed in the audit output.
     result = (
         load_enterprise_pack()
-        .evaluate({"permit": {"expired": True}, "secret": "must-not-appear"})
+        .evaluate(
+            {
+                "permit": {"expired": True},
+                "identity": {"agent_id": "must-not-appear"},
+            }
+        )
         .to_dict()
     )
     assert result["policy_version"] == "1.0.0"

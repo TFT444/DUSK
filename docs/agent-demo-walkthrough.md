@@ -1,7 +1,8 @@
-# Running the demo: clean vs. poisoned
+# Running the DUSK Production Agent Harness: clean vs. poisoned
 
-A detailed walkthrough of the two demo scenarios in
-`examples/agent-action-monitor/README.md`.
+A detailed walkthrough of the two keyless scenarios in
+`dusk-agent-harness/README.md`. Authenticated real LLM validation uses the
+protected workflow described there.
 
 Two scenarios, both keyless by default: an agent proposes a routine action, and
 DUSK lets it through; an agent gets hijacked into proposing something well
@@ -15,19 +16,19 @@ docker compose up
 
 This brings up `dusk-gate` (the real `/v1/gate` service, SIE-backed),
 `sie`, `mock-prod` (the dummy downstream target and webhook sink), and
-`agent-demo`.
+`runtime`.
 
 Without Docker, run the pieces directly instead:
 
 ```bash
 # terminal 1: local stub gate (no SIE or webhook service needed)
-python agent-demo/stub_gate.py
+python runtime/stub_gate.py
 
 # terminal 2: mock-prod
 python mock-prod/app.py
 
 # terminal 3: the scenarios
-python agent-demo/run_scenario.py
+python runtime/run_scenario.py
 ```
 
 ## What you'll see
@@ -91,15 +92,15 @@ mode**, where `BLOCK` actually stops the action before it reaches `mock-prod`.
 ## Running just one scenario
 
 ```bash
-python agent-demo/run_scenario.py --scenario poisoned
+python runtime/run_scenario.py --scenario poisoned
 ```
 
 ## Load testing
 
 ```bash
-python agent-demo/load_driver.py --concurrency 20 --total 200
+python runtime/load_driver.py --concurrency 20 --total 200
 ```
 
 Fires concurrent clean/poisoned traffic through the same path and reports
-p50/p95/p99 gate latency -- see `agent-demo/load_driver.py` for the numbers
+p50/p95/p99 gate latency. See `runtime/load_driver.py` for the numbers
 behind the latency-under-load figure in the main README.

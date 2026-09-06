@@ -1,0 +1,9 @@
+# CI-only override: require authentication for production harness validation
+# and select watch or enforce mode explicitly.
+# Always layer this file over compose.yml so the local-only bindings and
+# container hardening controls remain active.
+services:
+  dusk-gate:
+    environment:
+      DUSK_ENFORCE: "${DUSK_ENFORCE:?set DUSK_ENFORCE for the CI harness}"
+      DUSK_GATE_API_KEY: "${DUSK_GATE_API_KEY:?set DUSK_GATE_API_KEY for the CI harness}"

@@ -4,16 +4,32 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import IntEnum
 from importlib.resources import files
 from pathlib import Path
 
 import yaml
 
+from dusk.policies.evidence import EvidenceState as EvidenceState
+from dusk.policies.evidence import classify_evidence
+
 _SEVERITIES = {"low", "medium", "high", "critical"}
-_STATUSES = {"enforced", "planned"}
-_OPERATORS = {"equals", "in", "contains", "exists", "not_equals", "not_true"}
+_STATUSES = {"proposed", "planned", "implemented", "validated", "enforced"}
+_OPERATORS = {
+    "equals",
+    "in",
+    "contains",
+    "contains_any",
+    "exists",
+    "not_equals",
+    "not_equals_or_missing",
+    "not_true",
+    "greater_than",
+    "greater_than_or_missing",
+    "less_than",
+    "less_than_or_missing",
+}
 _MISSING = object()
 _RULE_FIELDS = {
     "id",
@@ -30,6 +46,31 @@ _RULE_FIELDS = {
     "prerequisites",
     "tests",
 }
+
+# Top-level domain keys permitted in a policy context (issue #144).
+# Unknown keys are rejected at the enforcement boundary to prevent
+# callers from inadvertently smuggling credential-shaped data through
+# the evaluator or relying on undefined field semantics.
+_CONTEXT_DOMAINS: frozenset[str] = frozenset(
+    {
+        "action",
+        "identity",
+        "tenant",
+        "session",
+        "objective",
+        "delegation",
+        "tool",
+        "resource",
+        "data",
+        "destination",
+        "permit",
+        "approval",
+        "execution",
+        "cloud",
+        "kubernetes",
+        "infrastructure",
+    }
+)
 
 
 class Decision(IntEnum):
@@ -70,16 +111,32 @@ class Rule:
 
 @dataclass(frozen=True)
 class PolicyResult:
-    """Aggregate policy decision and matched rules."""
+    """Aggregate policy decision and matched rules.
+
+    Attributes:
+        decision:          The highest-priority decision across matched rules.
+        policy_version:    Semantic version of the pack that produced this result.
+        matched_rules:     Enforced rules whose conditions were satisfied.
+        evidence_degraded: True when at least one context domain carried
+                           UNKNOWN, STALE, or CONFLICTED evidence.  Callers
+                           must record this in audit evidence.
+    """
 
     decision: Decision
     policy_version: str
     matched_rules: tuple[Rule, ...]
+    evidence_degraded: bool = field(default=False)
 
     def to_dict(self) -> dict[str, object]:
+        """Return a JSON-serialisable audit record.
+
+        Only rule metadata is included.  Context field values are never
+        echoed to prevent credential or sensitive payload leakage.
+        """
         return {
             "decision": self.decision.name,
             "policy_version": self.policy_version,
+            "evidence_degraded": self.evidence_degraded,
             "matched_rules": [
                 {
                     "id": rule.id,
@@ -105,13 +162,31 @@ class PolicyPack:
     rules: tuple[Rule, ...]
 
     def evaluate(self, context: Mapping[str, object]) -> PolicyResult:
+        """Evaluate ``context`` against all enforced rules.
+
+        Raises:
+            ValueError: if ``context`` contains keys outside
+                ``_CONTEXT_DOMAINS``.
+        """
+        _validate_context_domains(context)
+
         matched = tuple(
             rule
             for rule in self.rules
             if rule.status == "enforced" and _matches(rule.conditions, context)
         )
         decision = max((rule.decision for rule in matched), default=self.default_decision)
-        return PolicyResult(decision=decision, policy_version=self.version, matched_rules=matched)
+
+        consequential, degraded = classify_evidence(context)
+        if degraded and consequential:
+            decision = Decision.DENY
+
+        return PolicyResult(
+            decision=decision,
+            policy_version=self.version,
+            matched_rules=matched,
+            evidence_degraded=degraded,
+        )
 
 
 def load_policy_pack(path: Path) -> PolicyPack:
@@ -126,6 +201,25 @@ def load_enterprise_pack() -> PolicyPack:
     with resource.open("r", encoding="utf-8") as handle:
         raw = yaml.safe_load(handle)
     return _load_mapping(raw)
+
+
+# ---------------------------------------------------------------------------
+# Internal: context validation
+# ---------------------------------------------------------------------------
+
+
+def _validate_context_domains(context: Mapping[str, object]) -> None:
+    unknown = set(context.keys()) - _CONTEXT_DOMAINS
+    if unknown:
+        raise ValueError(
+            f"unknown context domain(s): {sorted(unknown)}; "
+            f"permitted domains: {sorted(_CONTEXT_DOMAINS)}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Internal: pack and rule loading
+# ---------------------------------------------------------------------------
 
 
 def _load_mapping(raw: object) -> PolicyPack:
@@ -156,14 +250,11 @@ def _load_rule(raw: object) -> Rule:
     if severity not in _SEVERITIES:
         raise ValueError(f"invalid severity: {severity}")
     if status not in _STATUSES:
-        raise ValueError(f"invalid status: {status}")
+        raise ValueError(f"invalid status: {status!r}; valid statuses: {sorted(_STATUSES)}")
     conditions = _conditions(raw["match"])
     prerequisites = _text_tuple(raw["prerequisites"], "prerequisites")
     tests = _text_tuple(raw["tests"], "tests")
-    if status == "enforced" and (not conditions or not tests):
-        raise ValueError("enforced rules require conditions and tests")
-    if status == "planned" and not prerequisites:
-        raise ValueError("planned rules require prerequisites")
+    _validate_rule_lifecycle(status, conditions, prerequisites, tests)
     rule_id = _required_text(raw, "id")
     version = _required_text(raw, "version")
     if re.fullmatch(r"DUSK-[A-Z]+-[0-9]{3}", rule_id) is None:
@@ -185,6 +276,37 @@ def _load_rule(raw: object) -> Rule:
         prerequisites=prerequisites,
         tests=tests,
     )
+
+
+def _validate_rule_lifecycle(
+    status: str,
+    conditions: tuple[Condition, ...],
+    prerequisites: tuple[str, ...],
+    tests: tuple[str, ...],
+) -> None:
+    """Enforce the per-lifecycle requirements on rule completeness.
+
+    Lifecycle progression and what each status requires:
+        proposed:    No requirements; rule is being scoped.
+        planned:     Prerequisites must be listed (telemetry not yet available).
+        implemented: Conditions required; tests not yet mandatory.
+        validated:   Conditions and tests both required; ready for enforcement.
+        enforced:    Conditions and tests required; active at runtime.
+    """
+    if status == "enforced" and (not conditions or not tests):
+        raise ValueError("enforced rules require conditions and tests")
+    if status == "validated" and (not conditions or not tests):
+        raise ValueError("validated rules require conditions and tests")
+    if status == "implemented" and not conditions:
+        raise ValueError("implemented rules require conditions")
+    if status == "planned" and not prerequisites:
+        raise ValueError("planned rules require prerequisites")
+    # proposed: no field requirements
+
+
+# ---------------------------------------------------------------------------
+# Internal: condition matching
+# ---------------------------------------------------------------------------
 
 
 def _conditions(raw: object) -> tuple[Condition, ...]:
@@ -216,6 +338,42 @@ def _resolve(context: Mapping[str, object], path: str) -> object:
     return value
 
 
+def _compare_numeric(actual: object, expected: object, op: str) -> bool:
+    """Numeric greater_than / less_than comparison; missing or non-numeric values do not fire."""
+    if actual is _MISSING:
+        return False
+    try:
+        a, e = float(actual), float(expected)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return False
+    return a > e if op == "greater_than" else a < e
+
+
+def _compare_numeric_or_missing(actual: object, expected: object, op: str) -> bool:
+    """Fail closed when either required numeric operand is absent or malformed."""
+    if actual is _MISSING or expected is _MISSING:
+        return True
+    try:
+        a, e = float(actual), float(expected)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return True
+    return a > e if op == "greater_than_or_missing" else a < e
+
+
+def _compare_numeric_condition(actual: object, expected: object, op: str) -> bool:
+    if op.endswith("_or_missing"):
+        return _compare_numeric_or_missing(actual, expected, op)
+    return _compare_numeric(actual, expected, op)
+
+
+def _compare_collection(actual: object, expected: object, op: str) -> bool:
+    if not isinstance(actual, (str, list, tuple, set)):
+        return False
+    if op == "contains":
+        return expected in actual
+    return isinstance(expected, list) and any(value in actual for value in expected)
+
+
 def _compare(actual: object, condition: Condition, context: Mapping[str, object]) -> bool:
     expected = condition.value
     if isinstance(expected, str) and expected.startswith("$"):
@@ -226,12 +384,21 @@ def _compare(actual: object, condition: Condition, context: Mapping[str, object]
         return actual == expected
     if condition.operator == "not_equals":
         return actual is not _MISSING and actual != expected
+    if condition.operator == "not_equals_or_missing":
+        return actual is _MISSING or expected is _MISSING or actual != expected
     if condition.operator == "not_true":
         return actual is not True
-    if condition.operator == "contains":
-        return isinstance(actual, (str, list, tuple, set)) and expected in actual
+    if condition.operator in {"contains", "contains_any"}:
+        return _compare_collection(actual, expected, condition.operator)
     if condition.operator == "in":
         return isinstance(expected, list) and actual in expected
+    if condition.operator in {
+        "greater_than",
+        "less_than",
+        "greater_than_or_missing",
+        "less_than_or_missing",
+    }:
+        return _compare_numeric_condition(actual, expected, condition.operator)
     return False
 
 

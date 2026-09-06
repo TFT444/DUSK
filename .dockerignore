@@ -1,0 +1,17 @@
+.git
+.github
+.venv
+.env
+**/.env*
+**/__pycache__
+**/*.pyc
+.pytest_cache
+.mypy_cache
+.ruff_cache
+container-evidence
+deploy
+docs
+dusk-agent-harness
+results
+tests
+services/control-plane/tests

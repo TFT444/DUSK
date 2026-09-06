@@ -1,0 +1,6 @@
+# Enforce-mode override for local DUSK Production Agent Harness validation.
+# Use only with compose.yml so all localhost and container restrictions remain.
+services:
+  dusk-gate:
+    environment:
+      DUSK_ENFORCE: "true"

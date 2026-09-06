@@ -1,0 +1,139 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  IAM role and optional GitHub OIDC provider for the DUSK Bedrock Mantle
+  dev-validation workflow (Kimi K2.5). Trust is restricted to the
+  ShieldTech-Ltd/DUSK repository's real-agent-dev GitHub Actions environment
+  only. Pull requests, arbitrary branches, forks, the production real-agent
+  environment, and any other environment cannot assume this role.
+
+  Unlike the production stack, this role grants the minimum Mantle
+  authentication, project-read, and inference permissions needed by the
+  OpenAI-compatible client. Bearer-token use is restricted to SHORT_TERM
+  tokens, and no
+  bedrock:InvokeModel or bedrock:ListInferenceProfiles permission is needed.
+  No account IDs are hard-coded. Deploy with aws cloudformation deploy.
+
+Parameters:
+  GitHubOrg:
+    Type: String
+    Default: ShieldTech-Ltd
+    Description: GitHub organisation name (case-sensitive)
+  GitHubRepo:
+    Type: String
+    Default: DUSK
+    Description: Repository name without owner prefix (case-sensitive)
+  GitHubOrgId:
+    Type: String
+    AllowedPattern: "^[0-9]+$"
+    Description: Immutable numeric GitHub organisation ID
+  GitHubRepoId:
+    Type: String
+    AllowedPattern: "^[0-9]+$"
+    Description: Immutable numeric GitHub repository ID
+  GitHubEnvironment:
+    Type: String
+    Default: real-agent-dev
+    Description: GitHub Actions environment name (must match exactly)
+  RoleName:
+    Type: String
+    Default: DuskRealAgentDevMantleRole
+    Description: Name for the IAM role
+  ExistingOidcProviderArn:
+    Type: String
+    Default: ""
+    Description: >
+      ARN of an existing GitHub Actions OIDC provider
+      (token.actions.githubusercontent.com) in this AWS account.
+      Leave blank to create a new provider. Supply this value if one already
+      exists to avoid the 'EntityAlreadyExists' error - AWS allows only one
+      OIDC provider per URL per account.
+
+Conditions:
+  CreateOidcProvider:
+    Fn::Equals:
+      - Ref: ExistingOidcProviderArn
+      - ""
+
+Resources:
+  GitHubOidcProvider:
+    Condition: CreateOidcProvider
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList:
+        - sts.amazonaws.com
+      ThumbprintList:
+        # SHA-1 fingerprints of GitHub's OIDC CA certificates.
+        # AWS validates JWKS signatures independently; these are required by
+        # the CloudFormation resource type but not the primary auth mechanism.
+        - 6938fd4d98bab03faadb97b34396831e3780aea1
+        - 1c58a3a8518e8759bf075b76b750d4f2df264fcd
+
+  DuskMantleDevRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName:
+        Ref: RoleName
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated:
+                Fn::If:
+                  - CreateOidcProvider
+                  - Fn::GetAtt:
+                      - GitHubOidcProvider
+                      - Arn
+                  - Ref: ExistingOidcProviderArn
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                "token.actions.githubusercontent.com:aud": sts.amazonaws.com
+                # EXACT subject: the dev environment only, no wildcard.
+                "token.actions.githubusercontent.com:sub":
+                  Fn::Sub: >-
+                    repo:${GitHubOrg}@${GitHubOrgId}/${GitHubRepo}@${GitHubRepoId}:environment:${GitHubEnvironment}
+      Policies:
+        - PolicyName: BedrockMantleDevInference
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                # CallWithBearerToken does not support resource-level
+                # scoping, so it must be granted on "*". Restrict it to
+                # short-term tokens and keep runtime inference actions out of
+                # this role.
+                Action: bedrock-mantle:CallWithBearerToken
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    "bedrock-mantle:bearerTokenType": SHORT_TERM
+              - Effect: Allow
+                Action:
+                  - bedrock-mantle:CreateInference
+                  - bedrock-mantle:GetProject
+                  - bedrock-mantle:ListProjects
+                  - bedrock-mantle:ListTagsForResource
+                Resource:
+                  Fn::Sub: >-
+                    arn:${AWS::Partition}:bedrock-mantle:${AWS::Region}:${AWS::AccountId}:project/*
+
+Outputs:
+  RoleArn:
+    Value:
+      Fn::GetAtt:
+        - DuskMantleDevRole
+        - Arn
+    Description: ARN of the IAM role for the DUSK Mantle dev-validation workflow
+
+  OidcProviderArn:
+    Value:
+      Fn::If:
+        - CreateOidcProvider
+        - Fn::GetAtt:
+            - GitHubOidcProvider
+            - Arn
+        - Ref: ExistingOidcProviderArn
+    Description: ARN of the GitHub OIDC provider (created here or supplied)
