@@ -1,5 +1,5 @@
 /**
- * Worker unit tests — all 12 prompt-doc scenarios plus edge cases.
+ * Worker unit tests -- all 12 prompt-doc scenarios plus edge cases.
  * The policy service is mocked; no network or process is started.
  */
 
@@ -7,14 +7,14 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { parseDemoRequest } from "../src/demo-actions.js";
 
 // ---------------------------------------------------------------------------
-// parseDemoRequest — input validation
+// parseDemoRequest -- input validation
 // ---------------------------------------------------------------------------
 
 describe("parseDemoRequest", () => {
   it("accepts a valid demo.read_status normal request", () => {
     const result = parseDemoRequest({
       action: "demo.read_status",
-      signal: "normal",
+      risk_signal: "normal",
       tenant_id: "t1",
       agent_id: "a1",
       correlation_id: "c1",
@@ -26,7 +26,7 @@ describe("parseDemoRequest", () => {
   it("accepts a valid demo.rotate_demo_key prompt_injection request", () => {
     const result = parseDemoRequest({
       action: "demo.rotate_demo_key",
-      signal: "prompt_injection",
+      risk_signal: "prompt_injection",
       tenant_id: "t1",
       agent_id: "a1",
       correlation_id: "c1",
@@ -39,7 +39,7 @@ describe("parseDemoRequest", () => {
     expect(
       parseDemoRequest({
         action: "admin.delete_all",
-        signal: "normal",
+        risk_signal: "normal",
         tenant_id: "t1",
         agent_id: "a1",
         correlation_id: "c1",
@@ -52,7 +52,7 @@ describe("parseDemoRequest", () => {
     expect(
       parseDemoRequest({
         action: "demo.read_status",
-        signal: "suspicious",
+        risk_signal: "suspicious",
         tenant_id: "t1",
         agent_id: "a1",
         correlation_id: "c1",
@@ -65,7 +65,7 @@ describe("parseDemoRequest", () => {
     expect(
       parseDemoRequest({
         action: "demo.read_status",
-        signal: "normal",
+        risk_signal: "normal",
         tenant_id: "t1",
         agent_id: "a1",
         correlation_id: "c1",
@@ -85,8 +85,21 @@ describe("parseDemoRequest", () => {
     expect(
       parseDemoRequest({
         action: "demo.read_status",
-        signal: "normal",
+        risk_signal: "normal",
         tenant_id: "",
+        agent_id: "a1",
+        correlation_id: "c1",
+      }),
+    ).toBeNull();
+  });
+
+  // old "signal" field must be rejected (field renamed to risk_signal)
+  it("rejects requests using the old 'signal' field name", () => {
+    expect(
+      parseDemoRequest({
+        action: "demo.read_status",
+        signal: "normal",
+        tenant_id: "t1",
         agent_id: "a1",
         correlation_id: "c1",
       }),
@@ -95,14 +108,14 @@ describe("parseDemoRequest", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Worker fetch handler — integration-style tests with mocked upstream
+// Worker fetch handler -- integration-style tests with mocked upstream
 // ---------------------------------------------------------------------------
 
 import worker from "../src/index.js";
 
 const ENV = {
-  POLICY_URL: "http://127.0.0.1:8787",
-  HMAC_SECRET: "test-hmac-secret-32bytes-padding!",
+  DUSK_DEMO_ORIGIN: "http://127.0.0.1:8787",
+  DUSK_DEMO_SHARED_SECRET: "test-hmac-secret-32bytes-padding!",
 };
 
 function makeRequest(body: unknown, method = "POST", path = "/api/demo-actions"): Request {
@@ -118,55 +131,31 @@ beforeEach(() => {
   vi.restoreAllMocks();
 });
 
-function mockUpstream(evalResp: object, execResp?: object): void {
-  let call = 0;
+function mockUpstream(resp: object): void {
   vi.stubGlobal(
     "fetch",
-    vi.fn(async (_url: string, _opts: RequestInit) => {
-      call++;
-      if (call === 1) {
-        return new Response(JSON.stringify(evalResp), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        });
-      }
-      return new Response(JSON.stringify(execResp ?? {}), {
+    vi.fn(async (_url: string, _opts: RequestInit) =>
+      new Response(JSON.stringify(resp), {
         status: 200,
         headers: { "Content-Type": "application/json" },
-      });
-    }),
+      }),
+    ),
   );
 }
 
-// Scenario 1: allowed demo.read_status → executed: true
+// Scenario 1: allowed demo.read_status -> executed: true
 it("returns executed:true for demo.read_status with normal signal", async () => {
-  mockUpstream(
-    {
-      decision: "ALLOW",
-      reason_code: "POLICY_ALLOWED",
-      permit: {
-        permit_id: "p1",
-        action: "demo.read_status",
-        action_digest: "abc",
-        tenant_id: "t1",
-        agent_id: "a1",
-        issued_at: Math.floor(Date.now() / 1000),
-        expires_at: Math.floor(Date.now() / 1000) + 60,
-        signature: "aabbcc",
-      },
-    },
-    {
-      executed: true,
-      decision: "ALLOW",
-      reason_code: "PERMIT_VALID",
-      permit_id: "p1",
-      action_digest: "abc",
-    },
-  );
+  mockUpstream({
+    decision: "ALLOWED",
+    reason_code: "PERMIT_VALID",
+    executed: true,
+    permit_id: "p1",
+    action_digest: "abc",
+  });
 
   const req = makeRequest({
     action: "demo.read_status",
-    signal: "normal",
+    risk_signal: "normal",
     tenant_id: "t1",
     agent_id: "a1",
     correlation_id: "corr-1",
@@ -175,15 +164,21 @@ it("returns executed:true for demo.read_status with normal signal", async () => 
   expect(resp.status).toBe(200);
   const body = await resp.json() as Record<string, unknown>;
   expect(body.executed).toBe(true);
-  expect(body.decision).toBe("ALLOW");
+  expect(body.decision).toBe("ALLOWED");
   expect(body.correlation_id).toBe("corr-1");
 });
 
-// Scenario 2: prompt_injection → executed: false, no permit call
-it("returns executed:false for prompt_injection without calling executor", async () => {
+// Scenario 2: prompt_injection -> executed: false, single upstream call
+it("returns executed:false for prompt_injection with a single upstream call", async () => {
   const fetchMock = vi.fn(async () =>
     new Response(
-      JSON.stringify({ decision: "BLOCK", reason_code: "PROMPT_INJECTION_DETECTED" }),
+      JSON.stringify({
+        decision: "BLOCKED",
+        reason_code: "PROMPT_INJECTION_DETECTED",
+        executed: false,
+        permit_id: null,
+        action_digest: "",
+      }),
       { status: 200, headers: { "Content-Type": "application/json" } },
     ),
   );
@@ -191,7 +186,7 @@ it("returns executed:false for prompt_injection without calling executor", async
 
   const req = makeRequest({
     action: "demo.rotate_demo_key",
-    signal: "prompt_injection",
+    risk_signal: "prompt_injection",
     tenant_id: "t1",
     agent_id: "a1",
     correlation_id: "corr-2",
@@ -201,12 +196,21 @@ it("returns executed:false for prompt_injection without calling executor", async
   const body = await resp.json() as Record<string, unknown>;
   expect(body.executed).toBe(false);
   expect(body.decision).toBe("BLOCKED");
-  // Must have called evaluate but NOT execute
+  // Single endpoint -- exactly one call
   expect(fetchMock).toHaveBeenCalledTimes(1);
 });
 
+// GET /healthz -> 200 {"status":"ok"}
+it("GET /healthz returns 200 and status ok", async () => {
+  const req = new Request("https://demo.example.com/healthz", { method: "GET" });
+  const resp = await worker.fetch(req, ENV, {} as ExecutionContext);
+  expect(resp.status).toBe(200);
+  const body = await resp.json() as Record<string, unknown>;
+  expect(body.status).toBe("ok");
+});
+
 // Scenario 10: wrong HTTP method
-it("rejects non-POST methods", async () => {
+it("rejects non-POST methods on /api/demo-actions", async () => {
   const req = new Request("https://demo.example.com/api/demo-actions", { method: "GET" });
   const resp = await worker.fetch(req, ENV, {} as ExecutionContext);
   expect(resp.status).toBe(405);
@@ -243,8 +247,6 @@ it("returns 413 for bodies exceeding the size limit", async () => {
 
 // Scenario 11: policy-service timeout returns BLOCKED
 it("returns BLOCKED when the policy service times out", async () => {
-  // Simulate an aborted/timed-out upstream call by rejecting immediately.
-  // callUpstream catches the error and returns null, which triggers BLOCKED.
   vi.stubGlobal(
     "fetch",
     vi.fn(async () => { throw new DOMException("signal aborted", "AbortError"); }),
@@ -252,7 +254,7 @@ it("returns BLOCKED when the policy service times out", async () => {
 
   const req = makeRequest({
     action: "demo.read_status",
-    signal: "normal",
+    risk_signal: "normal",
     tenant_id: "t1",
     agent_id: "a1",
     correlation_id: "corr-timeout",
@@ -273,7 +275,7 @@ it("returns BLOCKED when the policy service response is malformed", async () => 
 
   const req = makeRequest({
     action: "demo.read_status",
-    signal: "normal",
+    risk_signal: "normal",
     tenant_id: "t1",
     agent_id: "a1",
     correlation_id: "corr-malformed",
@@ -286,40 +288,23 @@ it("returns BLOCKED when the policy service response is malformed", async () => 
 
 // Scenario 12: receipt must not contain payloads or signatures
 it("receipt does not contain signature or secret-bearing fields", async () => {
-  mockUpstream(
-    {
-      decision: "ALLOW",
-      reason_code: "POLICY_ALLOWED",
-      permit: {
-        permit_id: "p99",
-        action: "demo.read_status",
-        action_digest: "digest99",
-        tenant_id: "t1",
-        agent_id: "a1",
-        issued_at: Math.floor(Date.now() / 1000),
-        expires_at: Math.floor(Date.now() / 1000) + 60,
-        signature: "secret-signature-value",
-      },
-    },
-    {
-      executed: true,
-      decision: "ALLOW",
-      reason_code: "PERMIT_VALID",
-      permit_id: "p99",
-      action_digest: "digest99",
-    },
-  );
+  mockUpstream({
+    decision: "ALLOWED",
+    reason_code: "PERMIT_VALID",
+    executed: true,
+    permit_id: "p99",
+    action_digest: "digest99",
+  });
 
   const req = makeRequest({
     action: "demo.read_status",
-    signal: "normal",
+    risk_signal: "normal",
     tenant_id: "t1",
     agent_id: "a1",
     correlation_id: "corr-redact",
   });
   const resp = await worker.fetch(req, ENV, {} as ExecutionContext);
   const text = await resp.text();
-  expect(text).not.toContain("secret-signature-value");
   expect(text).not.toContain("t1");   // tenant_id must not leak
   expect(text).not.toContain("a1");   // agent_id must not leak
 });

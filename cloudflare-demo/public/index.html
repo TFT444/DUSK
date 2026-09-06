@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DUSK Edge Demo</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>DUSK Edge Demo</h1>
+      <p class="subtitle">Controlled policy enforcement on Cloudflare Workers</p>
+    </header>
+
+    <div class="disclaimer" role="note">
+      A controlled Cloudflare edge demo for DUSK action authorization.
+      It is not a production deployment or a guarantee of agent safety.
+    </div>
+
+    <main>
+      <div class="card">
+        <h2>Demo Actions</h2>
+        <div class="action-grid">
+          <button id="btn-read" type="button">
+            demo.read_status
+            <span class="btn-label">signal: normal &mdash; expected: ALLOWED</span>
+          </button>
+          <button id="btn-rotate" type="button">
+            demo.rotate_demo_key
+            <span class="btn-label">signal: prompt_injection &mdash; expected: BLOCKED</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="result-area" aria-live="polite">
+        <div class="spinner" id="spinner" role="status" aria-label="Loading"></div>
+        <div class="result-box" id="result-box"></div>
+      </div>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>

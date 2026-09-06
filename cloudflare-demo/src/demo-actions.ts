@@ -15,16 +15,16 @@ export function parseDemoRequest(raw: unknown): DemoRequest | null {
   const obj = raw as Record<string, unknown>;
 
   // Reject unexpected fields
-  const allowed = new Set(["action", "signal", "tenant_id", "agent_id", "correlation_id"]);
+  const allowed = new Set(["action", "risk_signal", "tenant_id", "agent_id", "correlation_id"]);
   for (const key of Object.keys(obj)) {
     if (!allowed.has(key)) return null;
   }
 
-  const { action, signal, tenant_id, agent_id, correlation_id } = obj;
+  const { action, risk_signal, tenant_id, agent_id, correlation_id } = obj;
 
   if (typeof action !== "string" || !(ALLOWED_ACTIONS as readonly string[]).includes(action))
     return null;
-  if (typeof signal !== "string" || !(ALLOWED_SIGNALS as readonly string[]).includes(signal))
+  if (typeof risk_signal !== "string" || !(ALLOWED_SIGNALS as readonly string[]).includes(risk_signal))
     return null;
   if (typeof tenant_id !== "string" || !tenant_id) return null;
   if (typeof agent_id !== "string" || !agent_id) return null;
@@ -32,14 +32,14 @@ export function parseDemoRequest(raw: unknown): DemoRequest | null {
 
   return {
     action: action as DemoAction,
-    signal: signal as DemoSignal,
+    risk_signal: risk_signal as DemoSignal,
     tenant_id,
     agent_id,
     correlation_id,
   };
 }
 
-/** Compute a hex HMAC-SHA-256 signature for Worker → policy service requests. */
+/** Compute a hex HMAC-SHA-256 signature for Worker to policy service requests. */
 export async function signRequest(
   secret: string,
   method: string,

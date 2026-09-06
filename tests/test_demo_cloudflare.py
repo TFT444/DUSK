@@ -66,8 +66,8 @@ def test_valid_hmac_passes(guard: HmacGuard) -> None:
     ts = str(int(time.time()))
     nonce = "nonce-abc"
     body = b'{"action":"demo.read_status"}'
-    sig = _sign(guard, "POST", "/v1/demo/evaluate", ts, nonce, body)
-    assert guard.verify("POST", "/v1/demo/evaluate", ts, nonce, body, sig) is True
+    sig = _sign(guard, "POST", "/v1/demo/authorize-and-execute", ts, nonce, body)
+    assert guard.verify("POST", "/v1/demo/authorize-and-execute", ts, nonce, body, sig) is True
 
 
 # ---------------------------------------------------------------------------
@@ -79,7 +79,8 @@ def test_invalid_hmac_is_blocked(guard: HmacGuard) -> None:
     ts = str(int(time.time()))
     nonce = "nonce-bad"
     body = b'{"action":"demo.read_status"}'
-    assert guard.verify("POST", "/v1/demo/evaluate", ts, nonce, body, "deadbeef") is False
+    path = "/v1/demo/authorize-and-execute"
+    assert guard.verify("POST", path, ts, nonce, body, "deadbeef") is False
 
 
 # ---------------------------------------------------------------------------
@@ -91,8 +92,8 @@ def test_stale_timestamp_is_blocked(guard: HmacGuard) -> None:
     stale = str(int(time.time()) - 120)  # 2 minutes ago
     nonce = "nonce-stale"
     body = b"{}"
-    sig = _sign(guard, "POST", "/v1/demo/evaluate", stale, nonce, body)
-    assert guard.verify("POST", "/v1/demo/evaluate", stale, nonce, body, sig) is False
+    sig = _sign(guard, "POST", "/v1/demo/authorize-and-execute", stale, nonce, body)
+    assert guard.verify("POST", "/v1/demo/authorize-and-execute", stale, nonce, body, sig) is False
 
 
 # ---------------------------------------------------------------------------
@@ -104,11 +105,11 @@ def test_replayed_nonce_is_blocked(guard: HmacGuard) -> None:
     ts = str(int(time.time()))
     nonce = "nonce-once"
     body = b"{}"
-    sig = _sign(guard, "POST", "/v1/demo/evaluate", ts, nonce, body)
-    assert guard.verify("POST", "/v1/demo/evaluate", ts, nonce, body, sig) is True
+    sig = _sign(guard, "POST", "/v1/demo/authorize-and-execute", ts, nonce, body)
+    assert guard.verify("POST", "/v1/demo/authorize-and-execute", ts, nonce, body, sig) is True
     ts2 = str(int(time.time()))
-    sig2 = _sign(guard, "POST", "/v1/demo/evaluate", ts2, nonce, body)
-    assert guard.verify("POST", "/v1/demo/evaluate", ts2, nonce, body, sig2) is False
+    sig2 = _sign(guard, "POST", "/v1/demo/authorize-and-execute", ts2, nonce, body)
+    assert guard.verify("POST", "/v1/demo/authorize-and-execute", ts2, nonce, body, sig2) is False
 
 
 # ---------------------------------------------------------------------------
@@ -118,7 +119,7 @@ def test_replayed_nonce_is_blocked(guard: HmacGuard) -> None:
 
 def test_read_status_normal_is_allowed(policy: DemoPolicy) -> None:
     result = policy.evaluate("demo.read_status", "normal", TENANT, AGENT)
-    assert result.decision == "ALLOW"
+    assert result.decision == "ALLOWED"
     assert result.permit is not None
     assert result.permit.action == "demo.read_status"
     assert result.permit.tenant_id == TENANT
@@ -132,7 +133,7 @@ def test_read_status_normal_is_allowed(policy: DemoPolicy) -> None:
 
 def test_rotate_key_prompt_injection_is_blocked(policy: DemoPolicy) -> None:
     result = policy.evaluate("demo.rotate_demo_key", "prompt_injection", TENANT, AGENT)
-    assert result.decision == "BLOCK"
+    assert result.decision == "BLOCKED"
     assert result.reason_code == "PROMPT_INJECTION_DETECTED"
     assert result.permit is None
 
@@ -144,7 +145,7 @@ def test_rotate_key_prompt_injection_is_blocked(policy: DemoPolicy) -> None:
 
 def test_unknown_action_is_rejected(policy: DemoPolicy) -> None:
     result = policy.evaluate("admin.delete_all", "normal", TENANT, AGENT)
-    assert result.decision == "BLOCK"
+    assert result.decision == "BLOCKED"
     assert result.reason_code == "UNKNOWN_ACTION"
     assert result.permit is None
 
@@ -156,7 +157,7 @@ def test_unknown_action_is_rejected(policy: DemoPolicy) -> None:
 
 def test_unknown_signal_is_rejected(policy: DemoPolicy) -> None:
     result = policy.evaluate("demo.read_status", "suspicious", TENANT, AGENT)
-    assert result.decision == "BLOCK"
+    assert result.decision == "BLOCKED"
     assert result.reason_code == "UNKNOWN_SIGNAL"
     assert result.permit is None
 
@@ -190,11 +191,13 @@ def test_permit_signature_is_verifiable(policy: DemoPolicy, executor: DemoExecut
 # ---------------------------------------------------------------------------
 
 
-def test_full_allow_path_returns_execution_success(policy: DemoPolicy, executor: DemoExecutor) -> None:
+def test_full_allow_path_returns_execution_success(
+    policy: DemoPolicy, executor: DemoExecutor
+) -> None:
     permit = _fresh_permit(policy)
     result = executor.execute(permit, "demo.read_status", TENANT, AGENT)
     assert result.executed is True
-    assert result.decision == "ALLOW"
+    assert result.decision == "ALLOWED"
     assert result.permit_id == permit.permit_id
     assert result.action_digest == permit.action_digest
 
@@ -282,7 +285,9 @@ def test_tampered_signature_is_blocked(policy: DemoPolicy, executor: DemoExecuto
 # ---------------------------------------------------------------------------
 
 
-def test_receipt_does_not_contain_payload_values(policy: DemoPolicy, executor: DemoExecutor) -> None:
+def test_receipt_does_not_contain_payload_values(
+    policy: DemoPolicy, executor: DemoExecutor
+) -> None:
     permit = _fresh_permit(policy)
     result = executor.execute(permit, "demo.read_status", TENANT, AGENT)
     result_str = json.dumps(

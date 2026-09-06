@@ -1,12 +1,12 @@
 # DUSK Cloudflare Edge Demo
 
-Local-only demonstration of DUSK policy enforcement on a Cloudflare Worker.
-**Not a production deployment. Not a certification claim.**
+A controlled Cloudflare edge demo for DUSK action authorization.
+It is not a production deployment or a guarantee of agent safety.
 
 ## What this demo proves
 
-| Path | Action | Signal | Expected result |
-|------|--------|--------|-----------------|
+| Path | Action | risk_signal | Expected result |
+|------|--------|-------------|-----------------|
 | Allow | `demo.read_status` | `normal` | `executed: true`, signed permit issued and verified |
 | Block | `demo.rotate_demo_key` | `prompt_injection` | `executed: false`, no permit, no state change |
 
@@ -14,18 +14,24 @@ Local-only demonstration of DUSK policy enforcement on a Cloudflare Worker.
 
 ```
 Client
-  └─▶ Worker  POST /api/demo-actions
-        │   (strict schema · body-size limit · method guard)
-        │
-        ├─▶ Python policy service  POST /v1/demo/evaluate
-        │   (HMAC-signed · timestamp · nonce · fail-closed)
-        │   → ALLOW: Ed25519 permit issued
-        │   → BLOCK: reason code returned, chain stops
-        │
-        └─▶ Python restricted executor  POST /v1/demo/execute
-            (permit verified independently: expiry · replay · digest · identity · signature)
-            → executed: true  (process-local counter only, no real key access)
-            → receipt: correlation_id, decision, reason_code, permit_id, action_digest, timestamp
+  Browser (public/index.html + app.js) OR curl
+    |
+    POST /api/demo-actions
+    |
+  Cloudflare Worker (src/index.ts)
+    |  strict schema, body-size limit, method guard
+    |
+    POST /v1/demo/authorize-and-execute   (HMAC-signed)
+    |
+  Python policy service (src/dusk/demo_cloudflare.py)
+    |  timestamp freshness, nonce replay guard, HMAC verify
+    |  DUSK policy pack evaluation
+    |  Ed25519 permit issuance
+    |  Executor: expiry, replay, digest, identity, signature
+    |
+    DemoReceipt: decision, reason_code, executed, permit_id, action_digest
+    |
+  Worker adds correlation_id and timestamp, returns to client
 ```
 
 The Worker is transport only. The Python service is the final enforcement boundary.
@@ -37,85 +43,99 @@ The Worker is transport only. The Python service is the final enforcement bounda
 - **Fail-closed**: any upstream error, timeout, malformed response, invalid permit, replay, expiry, altered action, or identity mismatch returns `BLOCKED` with `executed: false`.
 - **Receipt redaction**: receipts contain only correlation ID, decision, reason code, permit ID (on allow), action digest, and timestamp. No payloads, signatures, IPs, or secret values.
 - **Body limit**: Worker rejects bodies >4096 bytes before parsing.
+- **Single endpoint**: `POST /v1/demo/authorize-and-execute` runs the full pipeline atomically; no partial execution risk.
 
 ## Running locally
 
 ### 1. Start the Python policy service
 
 ```bash
-cd C:\DUSK\DUSK
-# Generate a random HMAC secret and export it for both processes
-$env:DEMO_HMAC_SECRET = python -c "import secrets; print(secrets.token_hex(32))"
+# From the repo root (Windows PowerShell)
+$env:DUSK_DEMO_SHARED_SECRET = python -c "import secrets; print(secrets.token_hex(32))"
 
 python - <<'EOF'
 import os
 from dusk.demo_cloudflare import DemoServer
-DemoServer(hmac_secret=bytes.fromhex(os.environ["DEMO_HMAC_SECRET"])).serve_forever()
+DemoServer(hmac_secret=bytes.fromhex(os.environ["DUSK_DEMO_SHARED_SECRET"])).serve_forever()
 EOF
 ```
 
 ### 2. Run the Worker locally (separate terminal)
 
 ```bash
-cd C:\DUSK\DUSK\cloudflare-demo
+cd cloudflare-demo
 npm install
-# Set secrets for the local dev session
-npx wrangler secret put HMAC_SECRET   # paste the value from $env:DEMO_HMAC_SECRET
-npx wrangler dev
+npx wrangler secret put DUSK_DEMO_SHARED_SECRET   # paste the value from step 1
+npx wrangler dev --config wrangler.jsonc
 ```
 
-### 3. Send demo requests
+The Worker serves the dashboard at `http://localhost:8788/` and the API at `/api/demo-actions`.
+
+### 3. Use the dashboard or curl
 
 **Allow path**
 ```bash
 curl -X POST http://localhost:8788/api/demo-actions \
   -H "Content-Type: application/json" \
-  -d '{"action":"demo.read_status","signal":"normal","tenant_id":"demo-tenant","agent_id":"demo-agent","correlation_id":"test-1"}'
+  -d '{"action":"demo.read_status","risk_signal":"normal","tenant_id":"demo-tenant","agent_id":"demo-agent","correlation_id":"test-1"}'
 ```
 
-Expected: `{"executed":true,"decision":"ALLOW",...}`
+Expected: `{"decision":"ALLOWED","executed":true,...}`
 
 **Block path**
 ```bash
 curl -X POST http://localhost:8788/api/demo-actions \
   -H "Content-Type: application/json" \
-  -d '{"action":"demo.rotate_demo_key","signal":"prompt_injection","tenant_id":"demo-tenant","agent_id":"demo-agent","correlation_id":"test-2"}'
+  -d '{"action":"demo.rotate_demo_key","risk_signal":"prompt_injection","tenant_id":"demo-tenant","agent_id":"demo-agent","correlation_id":"test-2"}'
 ```
 
-Expected: `{"executed":false,"decision":"BLOCKED","reason_code":"PROMPT_INJECTION_DETECTED",...}`
+Expected: `{"decision":"BLOCKED","executed":false,"reason_code":"PROMPT_INJECTION_DETECTED",...}`
+
+**Health check**
+```bash
+curl http://localhost:8788/healthz
+```
+
+Expected: `{"status":"ok"}`
 
 ## Running tests
 
-**Python (20 tests covering all 12 prompt scenarios)**
+**Python unit tests (20 tests) and HTTP-level tests (9 tests)**
 ```bash
-cd C:\DUSK\DUSK
-python -m pytest tests/test_demo_cloudflare.py -v
+cd /c/DUSK/DUSK
+python -m pytest tests/test_demo_cloudflare.py tests/test_demo_cloudflare_http.py -v
 ```
 
-**TypeScript Worker (16 tests)**
+**TypeScript Worker tests (18 tests)**
 ```bash
-cd C:\DUSK\DUSK\cloudflare-demo
+cd cloudflare-demo
 npm test
 ```
 
 **Type check**
 ```bash
-cd C:\DUSK\DUSK\cloudflare-demo
+cd cloudflare-demo
 npx tsc --noEmit
 ```
 
-## Deployment prerequisites (future, separately approved step)
+**Python lint and types**
+```bash
+python -m ruff check src/dusk/demo_cloudflare.py tests/test_demo_cloudflare.py tests/test_demo_cloudflare_http.py
+python -m mypy src/dusk/demo_cloudflare.py --ignore-missing-imports
+```
+
+## Deployment prerequisites (Task 8 -- requires explicit approval)
 
 1. Create a new Worker named `dusk-edge-demo` with root `cloudflare-demo/`.
-2. Set `HMAC_SECRET` via `wrangler secret put HMAC_SECRET`. **Never commit a real secret.**
-3. Run the Python service on a trusted host; expose via Cloudflare Tunnel (optional) or keep loopback-only.
-4. Confirm the `POLICY_URL` var in `wrangler.toml` points to the correct service address.
+2. Set `DUSK_DEMO_SHARED_SECRET` via `wrangler secret put DUSK_DEMO_SHARED_SECRET`. **Never commit a real secret.**
+3. Update `DUSK_DEMO_ORIGIN` in `wrangler.jsonc` to the address of the policy service.
+4. Run the Python service on a trusted host; expose via Cloudflare Tunnel if needed.
 5. Do not reuse or modify the existing `dusk` Worker.
+6. This step requires explicit user approval before triggering.
 
 ## Known limitations
 
 - The Python service uses `http.server` (single-threaded). Suitable for demo only.
-- `DEMO_HMAC_SECRET` is a process-local demo key. Rotate it every session; it never persists.
+- `DUSK_DEMO_SHARED_SECRET` is a process-local demo key. Rotate every session; it never persists.
 - `demo.rotate_demo_key` with `normal` signal increments a process-local counter; it never touches real keys.
-- The Cloudflare Tunnel is not configured. The Worker can only reach the Python service when both run on the same machine with the Worker via `wrangler dev`.
-- No browser frontend. The API and automated tests are the E2E evidence.
+- The Cloudflare Tunnel is not configured in this PR. The Worker can reach the Python service only when both run on the same host via `wrangler dev`.

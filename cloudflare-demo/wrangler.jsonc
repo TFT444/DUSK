@@ -1,0 +1,17 @@
+{
+  "name": "dusk-edge-demo",
+  "main": "src/index.ts",
+  "compatibility_date": "2024-01-01",
+
+  // Static Assets: serves cloudflare-demo/public/ at the Worker origin.
+  // index.html is served at / and /index.html automatically.
+  "assets": {
+    "directory": "./public"
+  },
+
+  // Non-secret configuration. Secrets (DUSK_DEMO_SHARED_SECRET) are set via
+  // `wrangler secret put DUSK_DEMO_SHARED_SECRET` -- never committed here.
+  "vars": {
+    "DUSK_DEMO_ORIGIN": "http://127.0.0.1:8787"
+  }
+}

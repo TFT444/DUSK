@@ -15,7 +15,7 @@ export const UPSTREAM_TIMEOUT_MS = 5000;
 /** Fields accepted from the client. Unknown fields cause rejection. */
 export interface DemoRequest {
   action: DemoAction;
-  signal: DemoSignal;
+  risk_signal: DemoSignal;
   tenant_id: string;
   agent_id: string;
   correlation_id: string;
@@ -24,7 +24,7 @@ export interface DemoRequest {
 /** Redacted receipt returned to the client. Never contains payloads or secrets. */
 export interface DemoReceipt {
   correlation_id: string;
-  decision: "ALLOW" | "BLOCKED";
+  decision: "ALLOWED" | "BLOCKED";
   reason_code: string;
   permit_id: string | null;
   action_digest: string;
@@ -32,30 +32,11 @@ export interface DemoReceipt {
   timestamp: string;
 }
 
-/** Permit issued by the Python policy service. */
-export interface IssuedPermit {
-  permit_id: string;
-  action: string;
-  action_digest: string;
-  tenant_id: string;
-  agent_id: string;
-  issued_at: number;
-  expires_at: number;
-  signature: string;
-}
-
-/** Response from POST /v1/demo/evaluate */
-export interface EvalResponse {
-  decision: "ALLOW" | "BLOCK";
+/** Response from POST /v1/demo/authorize-and-execute */
+export interface AuthExecResponse {
+  decision: "ALLOWED" | "BLOCKED";
   reason_code: string;
-  permit?: IssuedPermit;
-}
-
-/** Response from POST /v1/demo/execute */
-export interface ExecResponse {
   executed: boolean;
-  decision: string;
-  reason_code: string;
   permit_id: string | null;
   action_digest: string;
 }

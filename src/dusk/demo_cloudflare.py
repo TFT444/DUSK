@@ -1,9 +1,9 @@
 """Narrowly scoped demo policy HTTP service for the Cloudflare edge demo.
 
 Exposes three classes consumed by the Worker via loopback HTTP:
-- HmacGuard  — verifies HMAC-SHA-256 on every inbound request
-- DemoPolicy — evaluates demo actions and issues Ed25519 permits
-- DemoExecutor — independently verifies permits and runs fake execution
+- HmacGuard  -- verifies HMAC-SHA-256 on every inbound request
+- DemoPolicy -- evaluates demo actions and issues Ed25519 permits
+- DemoExecutor -- independently verifies permits and runs fake execution
 
 The HTTP server (DemoServer) wraps all three and binds to 127.0.0.1 only.
 Never deploy or expose to external networks.
@@ -18,7 +18,7 @@ import secrets
 import time
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import TYPE_CHECKING, Final
+from typing import Final
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import (
@@ -27,9 +27,6 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
 )
 
 from dusk.policies import Decision, load_enterprise_pack
-
-if TYPE_CHECKING:
-    pass
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -64,7 +61,7 @@ class Permit:
 class EvalResult:
     """Policy evaluation outcome from DemoPolicy.evaluate()."""
 
-    decision: str           # "ALLOW" or "BLOCK"
+    decision: str           # "ALLOWED" or "BLOCKED"
     reason_code: str
     permit: Permit | None = None
 
@@ -74,7 +71,7 @@ class ExecResult:
     """Execution outcome from DemoExecutor.execute()."""
 
     executed: bool
-    decision: str           # "ALLOW" or "BLOCKED"
+    decision: str           # "ALLOWED" or "BLOCKED"
     reason_code: str
     permit_id: str | None
     action_digest: str
@@ -219,22 +216,22 @@ class DemoPolicy:
     ) -> EvalResult:
         """Evaluate an action request and return a decision with an optional permit."""
         if action not in _ALLOWED_ACTIONS:
-            return EvalResult("BLOCK", "UNKNOWN_ACTION")
+            return EvalResult("BLOCKED", "UNKNOWN_ACTION")
 
         if signal not in _ALLOWED_SIGNALS:
-            return EvalResult("BLOCK", "UNKNOWN_SIGNAL")
+            return EvalResult("BLOCKED", "UNKNOWN_SIGNAL")
 
         if signal == "prompt_injection":
-            return EvalResult("BLOCK", "PROMPT_INJECTION_DETECTED")
+            return EvalResult("BLOCKED", "PROMPT_INJECTION_DETECTED")
 
         context = _build_policy_context(action, signal)
         result = self._pack.evaluate(context)
 
         if result.decision is not Decision.ALLOW:
-            return EvalResult("BLOCK", "POLICY_DENIED")
+            return EvalResult("BLOCKED", "POLICY_DENIED")
 
         permit = _issue_permit(action, tenant_id, agent_id, self._private_key)
-        return EvalResult("ALLOW", "POLICY_ALLOWED", permit)
+        return EvalResult("ALLOWED", "POLICY_ALLOWED", permit)
 
 
 # ---------------------------------------------------------------------------
@@ -243,7 +240,7 @@ class DemoPolicy:
 
 
 class DemoExecutor:
-    """Restricted fake executor — verifies permit independently before any execution.
+    """Restricted fake executor -- verifies permit independently before any execution.
 
     Only process-local state (a counter and a seen-permit set) is ever mutated.
     No real keys are accessed or rotated.
@@ -286,7 +283,7 @@ class DemoExecutor:
         self._seen_permit_ids.add(permit.permit_id)
         self._demo_counter += 1
 
-        return ExecResult(True, "ALLOW", "PERMIT_VALID", permit.permit_id, permit.action_digest)
+        return ExecResult(True, "ALLOWED", "PERMIT_VALID", permit.permit_id, permit.action_digest)
 
     @staticmethod
     def _block(reason_code: str, permit: Permit) -> ExecResult:
@@ -302,8 +299,8 @@ class _DemoHandler(BaseHTTPRequestHandler):
     """Minimal HTTP handler for the demo policy service.
 
     Routes:
-        POST /v1/demo/evaluate  — policy evaluation + permit issuance
-        POST /v1/demo/execute   — permit verification + fake execution
+        GET  /healthz                        -- readiness probe (Worker only)
+        POST /v1/demo/authorize-and-execute  -- full pipeline: policy + execution
     """
 
     guard: HmacGuard
@@ -336,8 +333,14 @@ class _DemoHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def do_GET(self) -> None:
+        if self.path != "/healthz":
+            self._send(404, {"error": "not found"})
+            return
+        self._send(200, {"status": "ok"})
+
     def do_POST(self) -> None:
-        if self.path not in {"/v1/demo/evaluate", "/v1/demo/execute"}:
+        if self.path != "/v1/demo/authorize-and-execute":
             self._send(404, {"error": "not found"})
             return
 
@@ -356,77 +359,49 @@ class _DemoHandler(BaseHTTPRequestHandler):
             self._send(400, {"error": "invalid json"})
             return
 
-        if self.path == "/v1/demo/evaluate":
-            self._handle_evaluate(payload)
-        else:
-            self._handle_execute(payload)
+        self._handle_authorize_and_execute(payload)
 
-    def _handle_evaluate(self, payload: dict[str, object]) -> None:
+    def _handle_authorize_and_execute(self, payload: dict[str, object]) -> None:
         action = payload.get("action", "")
-        signal = payload.get("signal", "")
+        risk_signal = payload.get("risk_signal", "")
         tenant_id = payload.get("tenant_id", "")
         agent_id = payload.get("agent_id", "")
 
-        if not isinstance(action, str) or not isinstance(signal, str):
+        if not isinstance(action, str) or not isinstance(risk_signal, str):
             self._send(400, {"error": "invalid fields"})
             return
         if not isinstance(tenant_id, str) or not isinstance(agent_id, str):
             self._send(400, {"error": "invalid fields"})
             return
 
-        result = self.policy.evaluate(action, signal, tenant_id, agent_id)
+        eval_result = self.policy.evaluate(action, risk_signal, tenant_id, agent_id)
 
-        resp: dict[str, object] = {
-            "decision": result.decision,
-            "reason_code": result.reason_code,
-        }
-        if result.permit is not None:
-            p = result.permit
-            resp["permit"] = {
-                "permit_id": p.permit_id,
-                "action": p.action,
-                "action_digest": p.action_digest,
-                "tenant_id": p.tenant_id,
-                "agent_id": p.agent_id,
-                "issued_at": p.issued_at,
-                "expires_at": p.expires_at,
-                "signature": p.signature.hex(),
-            }
-
-        self._send(200, resp)
-
-    def _handle_execute(self, payload: dict[str, object]) -> None:
-        try:
-            raw_permit = payload["permit"]
-            if not isinstance(raw_permit, dict):
-                raise TypeError("permit must be a mapping")
-            action = str(payload["action"])
-            tenant_id = str(payload["tenant_id"])
-            agent_id = str(payload["agent_id"])
-            permit = Permit(
-                permit_id=str(raw_permit["permit_id"]),
-                action=str(raw_permit["action"]),
-                action_digest=str(raw_permit["action_digest"]),
-                tenant_id=str(raw_permit["tenant_id"]),
-                agent_id=str(raw_permit["agent_id"]),
-                issued_at=int(raw_permit["issued_at"]),
-                expires_at=int(raw_permit["expires_at"]),
-                signature=bytes.fromhex(str(raw_permit["signature"])),
+        if eval_result.decision != "ALLOWED" or eval_result.permit is None:
+            digest = _action_digest(action) if action in _ALLOWED_ACTIONS else ""
+            self._send(
+                200,
+                {
+                    "decision": "BLOCKED",
+                    "reason_code": eval_result.reason_code,
+                    "executed": False,
+                    "permit_id": None,
+                    "action_digest": digest,
+                },
             )
-        except (KeyError, ValueError, TypeError):
-            self._send(400, {"error": "invalid permit payload"})
             return
 
-        result = self.executor.execute(permit, action, tenant_id, agent_id)
+        exec_result = self.executor.execute(
+            eval_result.permit, action, tenant_id, agent_id
+        )
 
         self._send(
             200,
             {
-                "executed": result.executed,
-                "decision": result.decision,
-                "reason_code": result.reason_code,
-                "permit_id": result.permit_id,
-                "action_digest": result.action_digest,
+                "decision": exec_result.decision,
+                "reason_code": exec_result.reason_code,
+                "executed": exec_result.executed,
+                "permit_id": exec_result.permit_id,
+                "action_digest": exec_result.action_digest,
             },
         )
 
@@ -434,7 +409,12 @@ class _DemoHandler(BaseHTTPRequestHandler):
 class DemoServer:
     """Loopback-only HTTP service used by the Cloudflare Worker for local demos."""
 
-    def __init__(self, host: str = "127.0.0.1", port: int = 8787, hmac_secret: bytes = b"") -> None:
+    def __init__(
+        self,
+        host: str = "127.0.0.1",
+        port: int = 8787,
+        hmac_secret: bytes = b"",
+    ) -> None:
         if not hmac_secret:
             hmac_secret = secrets.token_bytes(32)
 

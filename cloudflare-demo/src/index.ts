@@ -3,7 +3,7 @@
  *
  * Transport layer only. Never the final enforcement boundary.
  * Enforcement chain:
- *   Client → Worker → Python policy service (evaluate) → Python executor (execute) → receipt
+ *   Client -> Worker -> Python policy service (/v1/demo/authorize-and-execute) -> receipt
  *
  * Security properties:
  * - Strict schema: unknown fields, methods, and routes are rejected immediately.
@@ -17,14 +17,13 @@ import { parseDemoRequest, signRequest } from "./demo-actions.js";
 import {
   BODY_LIMIT,
   UPSTREAM_TIMEOUT_MS,
+  type AuthExecResponse,
   type DemoReceipt,
-  type EvalResponse,
-  type ExecResponse,
 } from "./contracts.js";
 
 export interface Env {
-  POLICY_URL: string;
-  HMAC_SECRET: string;
+  DUSK_DEMO_ORIGIN: string;
+  DUSK_DEMO_SHARED_SECRET: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -58,7 +57,7 @@ async function callUpstream(
   const nonce = crypto.randomUUID();
 
   const sig = await signRequest(
-    env.HMAC_SECRET,
+    env.DUSK_DEMO_SHARED_SECRET,
     "POST",
     path,
     timestamp,
@@ -70,7 +69,7 @@ async function callUpstream(
   const timeoutId = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
 
   try {
-    const resp = await fetch(`${env.POLICY_URL}${path}`, {
+    const resp = await fetch(`${env.DUSK_DEMO_ORIGIN}${path}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -96,6 +95,12 @@ async function callUpstream(
 export default {
   async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+
+    // Health check (Worker readiness only -- does not verify Python service)
+    if (url.pathname === "/healthz") {
+      if (request.method !== "GET") return jsonError(405, "method not allowed");
+      return Response.json({ status: "ok" }, { status: 200 });
+    }
 
     if (url.pathname !== "/api/demo-actions") return jsonError(404, "not found");
     if (request.method !== "POST") return jsonError(405, "method not allowed");
@@ -131,53 +136,39 @@ export default {
     const demoReq = parseDemoRequest(rawObj);
     if (demoReq === null) return jsonError(400, "invalid request");
 
-    const { action, signal, tenant_id, agent_id, correlation_id } = demoReq;
+    const { action, risk_signal, tenant_id, agent_id, correlation_id } = demoReq;
 
-    // --- Step 1: policy evaluation ---
-    const evalBody = { action, signal, tenant_id, agent_id };
-    const evalResp = await callUpstream(env, "/v1/demo/evaluate", evalBody);
+    // Single upstream call: policy + execution in one shot
+    const upstreamBody = { action, risk_signal, tenant_id, agent_id };
+    const upstreamResp = await callUpstream(
+      env,
+      "/v1/demo/authorize-and-execute",
+      upstreamBody,
+    );
 
-    if (evalResp === null) return blocked(correlation_id, "UPSTREAM_UNAVAILABLE");
+    if (upstreamResp === null) {
+      return blocked(correlation_id, "UPSTREAM_UNAVAILABLE");
+    }
 
-    let evalJson: EvalResponse;
+    let authExec: AuthExecResponse;
     try {
-      evalJson = (await evalResp.json()) as EvalResponse;
-      if (typeof evalJson.decision !== "string") throw new Error("bad shape");
+      authExec = (await upstreamResp.json()) as AuthExecResponse;
+      if (typeof authExec.executed !== "boolean") throw new Error("bad shape");
+      if (authExec.decision !== "ALLOWED" && authExec.decision !== "BLOCKED") {
+        throw new Error("bad decision");
+      }
     } catch {
       return blocked(correlation_id, "UPSTREAM_BAD_RESPONSE");
     }
 
-    if (evalJson.decision !== "ALLOW" || evalJson.permit == null) {
-      return blocked(correlation_id, evalJson.reason_code ?? "POLICY_DENIED");
-    }
-
-    // --- Step 2: restricted executor ---
-    const execBody = {
-      permit: evalJson.permit,
-      action,
-      tenant_id,
-      agent_id,
-    };
-    const execResp = await callUpstream(env, "/v1/demo/execute", execBody);
-
-    if (execResp === null) return blocked(correlation_id, "EXECUTOR_UNAVAILABLE");
-
-    let execJson: ExecResponse;
-    try {
-      execJson = (await execResp.json()) as ExecResponse;
-      if (typeof execJson.executed !== "boolean") throw new Error("bad shape");
-    } catch {
-      return blocked(correlation_id, "EXECUTOR_BAD_RESPONSE");
-    }
-
-    // --- Redacted receipt ---
+    // Redacted receipt -- no payloads, signatures, IPs, or secret values
     const receipt: DemoReceipt = {
       correlation_id,
-      decision: execJson.executed ? "ALLOW" : "BLOCKED",
-      reason_code: execJson.reason_code ?? "UNKNOWN",
-      permit_id: execJson.executed ? (execJson.permit_id ?? null) : null,
-      action_digest: execJson.action_digest ?? "",
-      executed: execJson.executed,
+      decision: authExec.executed ? "ALLOWED" : "BLOCKED",
+      reason_code: authExec.reason_code ?? "UNKNOWN",
+      permit_id: authExec.executed ? (authExec.permit_id ?? null) : null,
+      action_digest: authExec.action_digest ?? "",
+      executed: authExec.executed,
       timestamp: new Date().toISOString(),
     };
 

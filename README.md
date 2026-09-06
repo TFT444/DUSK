@@ -244,6 +244,24 @@ a batch of actions offline instead.
 
 ---
 
+## Cloudflare Edge Demo
+
+A controlled Cloudflare edge demo for DUSK action authorization.
+It is not a production deployment or a guarantee of agent safety.
+
+The demo enforces two scenarios end-to-end through a Cloudflare Worker backed by a
+loopback Python policy service:
+
+| Action | risk_signal | Result |
+|--------|-------------|--------|
+| `demo.read_status` | `normal` | ALLOWED, executed: true |
+| `demo.rotate_demo_key` | `prompt_injection` | BLOCKED, executed: false |
+
+Source: [`cloudflare-demo/`](cloudflare-demo/) and [`src/dusk/demo_cloudflare.py`](src/dusk/demo_cloudflare.py).
+Full local run guide: [`docs/cloudflare-edge-demo.md`](docs/cloudflare-edge-demo.md).
+
+---
+
 ## Quickstart
 
 ```bash
