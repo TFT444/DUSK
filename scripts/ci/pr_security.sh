@@ -27,9 +27,13 @@ workflow_analysis() {
 gitleaks_range() {
   base_sha=$1
   head_sha=$2
+  config_args=""
+  if [ -f .gitleaks.toml ]; then
+    config_args="--config .gitleaks.toml"
+  fi
   docker run --rm -v "$PWD:/repo" -w /repo \
     ghcr.io/gitleaks/gitleaks@sha256:cdbb7c955abce02001a9f6c9f602fb195b7fadc1e812065883f695d1eeaba854 \
-    git /repo --no-banner --redact --exit-code 1 --log-opts="$base_sha..$head_sha"
+    git /repo --no-banner --redact --exit-code 1 $config_args --log-opts="$base_sha..$head_sha"
 }
 
 if [ "${1:-}" = "--task" ]; then

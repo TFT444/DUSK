@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from enum import IntEnum
+from enum import IntEnum, StrEnum
 from importlib.resources import files
 from pathlib import Path
 
@@ -79,6 +79,13 @@ class Decision(IntEnum):
     ALLOW = 0
     REQUIRE_APPROVAL = 1
     DENY = 2
+
+
+class PolicyStage(StrEnum):
+    """Whether policy evaluates a proposed action or a verified execution."""
+
+    AUTHORIZATION = "authorization"
+    EXECUTION = "execution"
 
 
 @dataclass(frozen=True)
@@ -161,19 +168,31 @@ class PolicyPack:
     default_decision: Decision
     rules: tuple[Rule, ...]
 
-    def evaluate(self, context: Mapping[str, object]) -> PolicyResult:
-        """Evaluate ``context`` against all enforced rules.
+    def evaluate(
+        self,
+        context: Mapping[str, object],
+        *,
+        stage: PolicyStage | str = PolicyStage.EXECUTION,
+    ) -> PolicyResult:
+        """Evaluate ``context`` at an authorization or execution boundary.
+
+        Authorization evaluates proposed-action policy only. Permit rules run
+        only at execution, after a cryptographic verifier has established the
+        permit facts. This prevents policy from treating a future permit as valid.
 
         Raises:
             ValueError: if ``context`` contains keys outside
-                ``_CONTEXT_DOMAINS``.
+                ``_CONTEXT_DOMAINS`` or stage is unsupported.
         """
         _validate_context_domains(context)
+        selected_stage = PolicyStage(stage)
 
         matched = tuple(
             rule
             for rule in self.rules
-            if rule.status == "enforced" and _matches(rule.conditions, context)
+            if rule.status == "enforced"
+            and (selected_stage is PolicyStage.EXECUTION or rule.category != "permit")
+            and _matches(rule.conditions, context)
         )
         decision = max((rule.decision for rule in matched), default=self.default_decision)
 

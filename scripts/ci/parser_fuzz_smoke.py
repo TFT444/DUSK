@@ -30,7 +30,9 @@ def fuzz_one(data: bytes) -> None:
 
 
 def main() -> None:
-    sys.argv = [sys.argv[0], "-runs=2000", "-max_len=4096"]
+    # ``-runs`` is a libFuzzer flag that exits nonzero in Atheris.  Its
+    # ``-atheris_runs`` counterpart terminates the bounded smoke run cleanly.
+    sys.argv = [sys.argv[0], "-atheris_runs=2000", "-max_len=4096"]
     atheris.Setup(sys.argv, fuzz_one)
     atheris.Fuzz()
 

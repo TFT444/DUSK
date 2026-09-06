@@ -1,0 +1,14 @@
+{
+  // Cloudflare Worker: dusk
+  // Secrets are configured outside Git via `wrangler secret put`.
+  // Required secrets: DUSK_ORIGIN (HTTPS URL), DUSK_GATEWAY_TOKEN (high-entropy bearer secret).
+  // Never commit real values here.
+  "name": "dusk",
+  "main": "workers/dusk-gateway/src/index.ts",
+  "compatibility_date": "2026-09-06",
+  "observability": {
+    "enabled": true,
+    "logs": { "enabled": true, "head_sampling_rate": 1 },
+    "traces": { "enabled": true, "head_sampling_rate": 1 }
+  }
+}

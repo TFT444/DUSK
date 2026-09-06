@@ -1,0 +1,16 @@
+{
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:worker": "vitest run --config workers/dusk-gateway/vitest.config.ts",
+    "typecheck:worker": "tsc --noEmit && tsc --noEmit -p workers/dusk-gateway/test",
+    "deploy:worker:dry-run": "wrangler deploy --dry-run",
+    "types:worker": "wrangler types"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.0.0",
+    "typescript": "^5.9.2",
+    "vitest": "^4.1.11",
+    "wrangler": "^4.129.0"
+  }
+}
