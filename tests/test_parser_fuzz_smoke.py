@@ -50,6 +50,7 @@ def test_parser_fuzz_harness_uses_atheris_bounded_run_flag(monkeypatch) -> None:
     ("fuzzer_output", "expected_returncode"),
     [
         ("Done 2000 in 0 second(s)\n", 0),
+        ("INFO: bounded run\nDone 2000 in 0 second(s)\n", 0),
         ("ERROR: no interesting inputs were found\n", 1),
         ("=== Uncaught Python exception: ===\nValueError: bad input\n", 1),
     ],
