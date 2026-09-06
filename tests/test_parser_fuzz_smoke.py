@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 import importlib.util
+import os
+import shutil
+import subprocess
 import sys
 import types
 from contextlib import nullcontext
 from pathlib import Path
+
+import pytest
 
 
 def test_parser_fuzz_harness_uses_atheris_bounded_run_flag(monkeypatch) -> None:
@@ -39,3 +44,43 @@ def test_parser_fuzz_harness_uses_atheris_bounded_run_flag(monkeypatch) -> None:
     assert "-atheris_runs=2000" in setup_args
     assert "-runs=2000" not in setup_args
     assert instrumented_functions == ["fuzz_one"]
+
+
+@pytest.mark.parametrize(
+    ("fuzzer_output", "expected_returncode"),
+    [
+        ("Done 2000 in 0 second(s)\n", 0),
+        ("ERROR: no interesting inputs were found\n", 1),
+        ("=== Uncaught Python exception: ===\nValueError: bad input\n", 1),
+    ],
+)
+def test_parser_fuzz_ci_wrapper_only_accepts_bounded_success(
+    tmp_path: Path, fuzzer_output: str, expected_returncode: int
+) -> None:
+    """Atheris's bounded exit is accepted only without a failure marker."""
+    fake_python = tmp_path / "fake-python"
+    fake_python.write_text(
+        "#!/bin/sh\n"
+        f"printf '%s' '{fuzzer_output}'\n"
+        "exit 1\n",
+        encoding="utf-8",
+    )
+    fake_python.chmod(0o755)
+    environment = os.environ | {"PYTHON_BIN": str(fake_python)}
+    shell_path = (
+        shutil.which("sh")
+        or shutil.which("sh.exe")
+        or str(Path("C:/Program Files/Git/bin/sh.exe"))
+    )
+    if shell_path is None:
+        pytest.skip("a POSIX shell is required to test the CI wrapper")
+
+    completed = subprocess.run(
+        [shell_path, "scripts/ci/run_parser_fuzz_smoke.sh"],
+        check=False,
+        capture_output=True,
+        env=environment,
+        text=True,
+    )
+
+    assert completed.returncode == expected_returncode
