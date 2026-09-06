@@ -1,0 +1,4 @@
+[allowlist]
+  description = "DUSK Ed25519 signing-key type annotation"
+  regexTarget = "match"
+  regexes = ["(?:signing_key|private_key): Ed25519PrivateKey"]

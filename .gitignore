@@ -36,6 +36,12 @@ dusk-agent-harness/tests/fixtures/*.json
 
 # Secrets
 .env
+.dev.vars*
+!workers/dusk-gateway/.dev.vars.example
+
+# Node / Wrangler
+node_modules/
+.wrangler/
 
 # Editors / OS
 .idea/

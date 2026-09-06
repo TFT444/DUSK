@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import datetime
 from threading import Lock
 from typing import Any, TypeVar
 
@@ -66,6 +67,7 @@ class RestrictedExecutionProxy:
         action: dict[str, Any],
         policy_version: str,
         executor: Callable[[dict[str, Any]], ResultT],
+        now: datetime | None = None,
     ) -> ResultT:
         if self._kill_switch.active:
             raise ExecutionBlockedError(
@@ -80,6 +82,7 @@ class RestrictedExecutionProxy:
                 action=action,
                 policy_version=policy_version,
                 replay_guard=self._replay_guard,
+                now=now,
             )
         except PermitError:
             raise
