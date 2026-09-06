@@ -12,6 +12,7 @@ with atheris.instrument_imports():
     from dusk.actions.event import AgentAction
 
 
+@atheris.instrument_func
 def fuzz_one(data: bytes) -> None:
     """Exercise JSON decoding and canonical event validation."""
     try:

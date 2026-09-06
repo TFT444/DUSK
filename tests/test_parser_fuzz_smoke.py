@@ -12,12 +12,18 @@ from pathlib import Path
 def test_parser_fuzz_harness_uses_atheris_bounded_run_flag(monkeypatch) -> None:
     """Atheris must exit gracefully after the configured number of runs."""
     setup_args: list[str] = []
+    instrumented_functions: list[str] = []
     fake_atheris = types.ModuleType("atheris")
     fake_atheris.instrument_imports = nullcontext
+
+    def instrument_func(callback: object) -> object:
+        instrumented_functions.append(callback.__name__)  # type: ignore[attr-defined]
+        return callback
 
     def setup(arguments: list[str], _callback: object) -> None:
         setup_args.extend(arguments)
 
+    fake_atheris.instrument_func = instrument_func
     fake_atheris.Setup = setup
     fake_atheris.Fuzz = lambda: None
     monkeypatch.setitem(sys.modules, "atheris", fake_atheris)
@@ -32,3 +38,4 @@ def test_parser_fuzz_harness_uses_atheris_bounded_run_flag(monkeypatch) -> None:
 
     assert "-atheris_runs=2000" in setup_args
     assert "-runs=2000" not in setup_args
+    assert instrumented_functions == ["fuzz_one"]
