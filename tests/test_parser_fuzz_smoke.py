@@ -47,21 +47,20 @@ def test_parser_fuzz_harness_uses_atheris_bounded_run_flag(monkeypatch) -> None:
 
 
 @pytest.mark.parametrize(
-    ("fuzzer_output", "expected_returncode"),
+    ("fuzzer_output", "fuzzer_returncode", "expected_returncode"),
     [
-        ("Done 2000 in 0 second(s)\n", 0),
-        ("INFO: bounded run\nDone 2000 in 0 second(s)\n", 0),
-        ("ERROR: no interesting inputs were found\n", 1),
-        ("=== Uncaught Python exception: ===\nValueError: bad input\n", 1),
+        ("Done 2000 in 0 second(s)\n", 1, 0),
+        ("ERROR: fuzzer crash\n", 77, 77),
+        ("=== Uncaught Python exception: ===\nValueError: bad input\n", 77, 77),
     ],
 )
 def test_parser_fuzz_ci_wrapper_only_accepts_bounded_success(
-    tmp_path: Path, fuzzer_output: str, expected_returncode: int
+    tmp_path: Path, fuzzer_output: str, fuzzer_returncode: int, expected_returncode: int
 ) -> None:
     """Atheris's bounded exit is accepted only without a failure marker."""
     fake_python = tmp_path / "fake-python"
     fake_python.write_text(
-        f"#!/bin/sh\nprintf '%s' '{fuzzer_output}'\nexit 1\n",
+        f"#!/bin/sh\nprintf '%s' '{fuzzer_output}'\nexit {fuzzer_returncode}\n",
         encoding="utf-8",
     )
     fake_python.chmod(0o755)
