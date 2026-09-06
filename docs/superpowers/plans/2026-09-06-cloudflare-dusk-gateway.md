@@ -6,7 +6,7 @@
 
 **Architecture:** A TypeScript Worker lives in `workers/dusk-gateway/` and is configured by root `wrangler.jsonc`, which lets the existing Cloudflare Workers Build discover it. The Worker has no policy authority. It authenticates requests, validates the bounded JSON contract, forwards to the HTTPS DUSK origin, and returns only the upstream result or a fail-closed error.
 
-**Tech Stack:** Cloudflare Workers, Wrangler, TypeScript, Vitest, `@cloudflare/vitest-pool-workers`.
+**Tech Stack:** Cloudflare Workers, Wrangler, TypeScript, Vitest, `@cloudflare/vitest-plugin`.
 
 **Spec:** `docs/superpowers/specs/2026-09-06-cloudflare-dusk-gateway-design.md`
 
@@ -80,8 +80,7 @@ Create `package.json` with exact scripts:
     "types:worker": "wrangler types"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.10.20",
-    "@cloudflare/workers-types": "^4.20260906.0",
+    "@cloudflare/vitest-plugin": "^1.0.0",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4",
     "wrangler": "^4.38.0"
@@ -249,7 +248,7 @@ git commit -s -m "feat(cloudflare): proxy validated actions to DUSK"
 **Interfaces:**
 - Documents only. It does not contain live origin URLs, tokens, or credentials.
 
-- [ ] **Step 1: Write the deployment guide**
+- [x] **Step 1: Write the deployment guide**
 
 Document the exact non-secret setup commands:
 

@@ -1,0 +1,5 @@
+# Local development variables for the dusk Worker.
+# Copy to .dev.vars (git-ignored) and fill in real values.
+# Never commit real secrets.
+DUSK_ORIGIN=
+DUSK_GATEWAY_TOKEN=
