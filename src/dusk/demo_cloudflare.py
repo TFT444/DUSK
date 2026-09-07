@@ -249,7 +249,6 @@ class DemoExecutor:
     def __init__(self, public_key: Ed25519PublicKey) -> None:
         self._public_key = public_key
         self._seen_permit_ids: set[str] = set()
-        self._demo_counter: int = 0
 
     def execute(
         self,
@@ -281,8 +280,6 @@ class DemoExecutor:
             return self._block("INVALID_SIGNATURE", permit)
 
         self._seen_permit_ids.add(permit.permit_id)
-        self._demo_counter += 1
-
         return ExecResult(True, "ALLOWED", "PERMIT_VALID", permit.permit_id, permit.action_digest)
 
     @staticmethod
@@ -307,7 +304,7 @@ class _DemoHandler(BaseHTTPRequestHandler):
     policy: DemoPolicy
     executor: DemoExecutor
 
-    def log_message(self, fmt: str, *args: object) -> None:
+    def log_message(self, _fmt: str, *args: object) -> None:
         pass  # suppress default access log
 
     def _read_body(self) -> bytes | None:

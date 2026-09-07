@@ -24,6 +24,7 @@ Categories:
 from dusk.actions.heal import AgentHealer
 from dusk.application.evaluator import DecisionWrite, EvaluationPrincipal, OffenseWrite
 from dusk.config import set_config
+from dusk.demo_cloudflare import _DemoHandler
 from dusk.detections.lateral import LateralDetection
 from dusk.detections.telemetry import TelemetryDetection
 from dusk.respond.isolate import IsolateResponder
@@ -50,6 +51,12 @@ OffenseWrite.occurred_at
 DecisionWrite.occurred_at
 
 set_config
+
+# BaseHTTPRequestHandler subclass -- methods dispatched by the framework,
+# never called directly from within this repo.
+_DemoHandler.log_message
+_DemoHandler.do_GET
+_DemoHandler.do_POST
 
 # Wired into cli.py's `gate --heal` in #65 (open, not yet merged as of this
 # writing) -- remove once #65 lands on dev.
