@@ -34,7 +34,7 @@ mypy_services() {
 vulture_root() {
   vulture src tests scripts/vulture_whitelist.py --min-confidence 60 \
     --ignore-decorators '@main.command,@click.*,@app.route,@app.get,@app.post,@*.fixture' \
-    --ignore-names return_value,side_effect
+    --ignore-names return_value,side_effect,instrument_imports,Setup,Fuzz
 }
 
 vulture_example() {
