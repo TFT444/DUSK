@@ -1,0 +1,16 @@
+{
+  "name": "dusk-cloudflare-demo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cloudflare Worker transport layer for the DUSK edge demo.",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250528.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}

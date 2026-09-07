@@ -34,7 +34,7 @@ mypy_services() {
 vulture_root() {
   vulture src tests scripts/vulture_whitelist.py --min-confidence 60 \
     --ignore-decorators '@main.command,@click.*,@app.route,@app.get,@app.post,@*.fixture' \
-    --ignore-names return_value,side_effect
+    --ignore-names return_value,side_effect,instrument_imports,Setup,Fuzz
 }
 
 vulture_example() {
@@ -142,6 +142,6 @@ run_controls "PR-028" sh "$0" --task documentation_contracts
 run_controls "PR-029" python scripts/ci/public_api_check.py "$base_sha"
 run_controls "PR-026 PR-027 PR-030 PR-039 PR-041 PR-042" sh "$0" --task root_tests
 run_controls "PR-031 PR-032 PR-033 PR-034 PR-035 PR-036 PR-037 PR-038" sh "$0" --task example_tests
-run_controls "PR-040" python scripts/ci/parser_fuzz_smoke.py
+run_controls "PR-040" sh scripts/ci/run_parser_fuzz_smoke.sh
 
 exit "$failed"
